@@ -1,0 +1,37 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Triangle", "Triangle", "{75D4210E-8C35-4F63-A717-AE3DDF0F343B}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TriangleD3D12", "D3D12\Source\TriangleD3D12.vcxproj", "{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TriangleVulkan", "Vulkan\Source\TriangleVulkan.vcxproj", "{8FB88E5E-9DDC-4020-AB3F-9786E45D4094}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36}.Debug|x64.ActiveCfg = Debug|x64
+		{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36}.Debug|x64.Build.0 = Debug|x64
+		{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36}.Release|x64.ActiveCfg = Release|x64
+		{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36}.Release|x64.Build.0 = Release|x64
+		{8FB88E5E-9DDC-4020-AB3F-9786E45D4094}.Debug|x64.ActiveCfg = Debug|x64
+		{8FB88E5E-9DDC-4020-AB3F-9786E45D4094}.Debug|x64.Build.0 = Debug|x64
+		{8FB88E5E-9DDC-4020-AB3F-9786E45D4094}.Release|x64.ActiveCfg = Release|x64
+		{8FB88E5E-9DDC-4020-AB3F-9786E45D4094}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0E2B39C7-853B-4C4A-9FD6-CC0056DA0E36} = {75D4210E-8C35-4F63-A717-AE3DDF0F343B}
+		{8FB88E5E-9DDC-4020-AB3F-9786E45D4094} = {75D4210E-8C35-4F63-A717-AE3DDF0F343B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D9F3DD3E-DA00-4DE7-B5D3-FE47A2470D3A}
+	EndGlobalSection
+EndGlobal
