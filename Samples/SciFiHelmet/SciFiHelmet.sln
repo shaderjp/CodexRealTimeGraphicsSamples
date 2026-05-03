@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SciFiHelmet", "SciFiHelmet", "{3190498A-57C2-4424-8F87-0B1F4EA7C5B1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SciFiHelmetD3D12", "D3D12\Source\SciFiHelmetD3D12.vcxproj", "{1B8C7B46-7E21-4B21-B982-2936A1D972B8}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SciFiHelmetVulkan", "Vulkan\Source\SciFiHelmetVulkan.vcxproj", "{331C7998-551D-4C25-8486-D58B6C71C79E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1B8C7B46-7E21-4B21-B982-2936A1D972B8}.Debug|x64.ActiveCfg = Debug|x64
+		{1B8C7B46-7E21-4B21-B982-2936A1D972B8}.Debug|x64.Build.0 = Debug|x64
+		{1B8C7B46-7E21-4B21-B982-2936A1D972B8}.Release|x64.ActiveCfg = Release|x64
+		{1B8C7B46-7E21-4B21-B982-2936A1D972B8}.Release|x64.Build.0 = Release|x64
+		{331C7998-551D-4C25-8486-D58B6C71C79E}.Debug|x64.ActiveCfg = Debug|x64
+		{331C7998-551D-4C25-8486-D58B6C71C79E}.Debug|x64.Build.0 = Debug|x64
+		{331C7998-551D-4C25-8486-D58B6C71C79E}.Release|x64.ActiveCfg = Release|x64
+		{331C7998-551D-4C25-8486-D58B6C71C79E}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1B8C7B46-7E21-4B21-B982-2936A1D972B8} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{331C7998-551D-4C25-8486-D58B6C71C79E} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {09765320-9622-445C-A2C9-77945095ED36}
+	EndGlobalSection
+EndGlobal
