@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <CodexdSampleRoot>$(MSBuildThisFileDirectory)</CodexdSampleRoot>
+    <CodexdOutputRoot>$(CodexdSampleRoot)Bin\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</CodexdOutputRoot>
+    <CodexdIntermediateRoot>$(CodexdSampleRoot)Obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</CodexdIntermediateRoot>
+  </PropertyGroup>
+</Project>

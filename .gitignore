@@ -43,6 +43,14 @@
 build/
 Build/
 build-*/
+.vs/
+x64/
+Debug/
+Release/
+Bin/
+Obj/
+bin/
+obj/
 
 # CMake generated files
 CMakeFiles/
@@ -55,8 +63,14 @@ compile_commands.json
 # Temporary files
 *.tmp
 *.log
+UpgradeLog*.htm
 *.bak
 *.swp
+
+# Shader outputs
+*.cso
+*.dxil
+*.spv
 
 # vcpkg
 vcpkg_installed/
