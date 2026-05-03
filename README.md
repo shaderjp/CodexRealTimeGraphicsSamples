@@ -2,6 +2,8 @@
 
 Direct3D12 and Vulkan real-time graphics samples for Windows and Visual Studio 2022.
 
+Japanese documentation is available in [README.ja.md](README.ja.md).
+
 The repository is organized by graphics technique under `Samples`. Each technique owns its shared assets and shaders, with API-specific Visual Studio projects placed side by side so the Direct3D12 and Vulkan implementations can be compared directly.
 
 ## Requirements
@@ -33,11 +35,19 @@ Pop-Location
 The sample folders each contain an API-neutral solution and side-by-side Direct3D12/Vulkan projects. Current samples:
 
 - `Samples/Triangle/Triangle.sln`
+- `Samples/Triangle/README.md`
 - `Samples/Triangle/D3D12/Source/TriangleD3D12.vcxproj`
 - `Samples/Triangle/Vulkan/Source/TriangleVulkan.vcxproj`
 - `Samples/Cube3D/Cube3D.sln`
+- `Samples/Cube3D/README.md`
 - `Samples/Cube3D/D3D12/Source/Cube3DD3D12.vcxproj`
 - `Samples/Cube3D/Vulkan/Source/Cube3DVulkan.vcxproj`
+- `Samples/SciFiHelmet/SciFiHelmet.sln`
+- `Samples/SciFiHelmet/README.md`
+- `Samples/SciFiHelmet/D3D12/Source/SciFiHelmetD3D12.vcxproj`
+- `Samples/SciFiHelmet/Vulkan/Source/SciFiHelmetVulkan.vcxproj`
+
+`Samples/SciFiHelmet` loads the glTF 2.0 SciFiHelmet asset and renders it with a small metallic-roughness PBR shader, normal mapping, ambient occlusion, and one directional light.
 
 ## Adding A Sample
 
