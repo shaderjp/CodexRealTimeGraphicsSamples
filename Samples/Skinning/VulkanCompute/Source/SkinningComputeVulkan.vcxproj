@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A4B6F758-2105-41BF-A08C-4919D2DB71F4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>SkinningComputeVulkan</RootNamespace>
+    <ProjectName>SkinningComputeVulkan</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(CodexdOutputRoot)</OutDir>
+    <IntDir>$(CodexdIntermediateRoot)</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(CodexdOutputRoot)</OutDir>
+    <IntDir>$(CodexdIntermediateRoot)</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;VK_USE_PLATFORM_WIN32_KHR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;VK_USE_PLATFORM_WIN32_KHR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="SkinningComputeVulkan.h" />
+    <ClInclude Include="..\..\Shared\SkinningData.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="SkinningComputeVulkan.cpp" />
+    <ClCompile Include="Main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\SkinningCompute.hlsl">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T vs_6_6 -E VSMain -D VULKAN=1 -fvk-use-dx-position-w -Zi -Fo "$(OutDir)SkinningCompute.vs.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ps_6_6 -E PSMain -D VULKAN=1 -fvk-use-dx-position-w -Zi -Fo "$(OutDir)SkinningCompute.ps.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T cs_6_6 -E CSMain -D VULKAN=1 -Zi -Fo "$(OutDir)SkinningCompute.cs.spv" "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T vs_6_6 -E VSMain -D VULKAN=1 -fvk-use-dx-position-w -O3 -Fo "$(OutDir)SkinningCompute.vs.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ps_6_6 -E PSMain -D VULKAN=1 -fvk-use-dx-position-w -O3 -Fo "$(OutDir)SkinningCompute.ps.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T cs_6_6 -E CSMain -D VULKAN=1 -O3 -Fo "$(OutDir)SkinningCompute.cs.spv" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)SkinningCompute.vs.spv;$(OutDir)SkinningCompute.ps.spv;$(OutDir)SkinningCompute.cs.spv</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)SkinningCompute.vs.spv;$(OutDir)SkinningCompute.ps.spv;$(OutDir)SkinningCompute.cs.spv</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling %(Identity) to Vulkan SPIR-V with DXC Shader Model 6.6</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling %(Identity) to Vulkan SPIR-V with DXC Shader Model 6.6</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EnsureVulkanSdk" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(VULKAN_SDK)' == ''" Text="VULKAN_SDK is not set. Install the Vulkan SDK and set VULKAN_SDK before building SkinningComputeVulkan." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Include\vulkan\vulkan.h')" Text="Vulkan headers were not found under $(VULKAN_SDK)\Include. Check the VULKAN_SDK environment variable." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Lib\vulkan-1.lib')" Text="vulkan-1.lib was not found under $(VULKAN_SDK)\Lib. Check the Vulkan SDK installation." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Bin\dxc.exe')" Text="Vulkan SDK dxc.exe was not found under $(VULKAN_SDK)\Bin. Check the Vulkan SDK installation." />
+  </Target>
+</Project>
