@@ -46,8 +46,16 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/SciFiHelmet/README.md`
 - `Samples/SciFiHelmet/D3D12/Source/SciFiHelmetD3D12.vcxproj`
 - `Samples/SciFiHelmet/Vulkan/Source/SciFiHelmetVulkan.vcxproj`
+- `Samples/Skinning/Skinning.sln`
+- `Samples/Skinning/README.md`
+- `Samples/Skinning/D3D12/Source/SkinningD3D12.vcxproj`
+- `Samples/Skinning/Vulkan/Source/SkinningVulkan.vcxproj`
+- `Samples/Skinning/D3D12Compute/Source/SkinningComputeD3D12.vcxproj`
+- `Samples/Skinning/VulkanCompute/Source/SkinningComputeVulkan.vcxproj`
 
 `Samples/SciFiHelmet` loads the glTF 2.0 SciFiHelmet asset and renders it with a small metallic-roughness PBR shader, normal mapping, ambient occlusion, and one directional light.
+
+`Samples/Skinning` loads the glTF 2.0 Cesium Man asset and renders animated vertex shader skinning or compute shader skinning with joint matrices. The compute variants write skinned vertices into a GPU buffer before the graphics pass.
 
 ## Adding A Sample
 
@@ -66,9 +74,15 @@ Samples/<TechniqueName>/
   Vulkan/
     Source/
       <TechniqueName>Vulkan.vcxproj
+  D3D12Compute/
+    Source/
+      <TechniqueName>ComputeD3D12.vcxproj
+  VulkanCompute/
+    Source/
+      <TechniqueName>ComputeVulkan.vcxproj
 ```
 
-Add API projects to the solution under a solution folder named after the technique. Shared HLSL should live in the technique's `Shaders` folder unless the shader is API-specific.
+Add API projects to the solution under a solution folder named after the technique. Compute variants can be added as sibling projects when the technique needs a separate pipeline sample. Shared HLSL should live in the technique's `Shaders` folder unless the shader is API-specific.
 
 ## Third Party
 

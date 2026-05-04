@@ -38,6 +38,9 @@ git submodule update --init --recursive
   頂点バッファ、インデックスバッファ、Constant Buffer、Depth Buffer を使った回転する立方体。
 - `Samples/SciFiHelmet`
   glTF 2.0 SciFiHelmet を読み込み、PBR ベースの HLSL シェーダ、法線マップ、AO、1 つのディレクショナルライトで描画。
+- `Samples/Skinning`
+  glTF 2.0 Cesium Man を読み込み、Joint Matrix の Constant Buffer を使った Vertex Shader Skinning / Compute Shader Skinning でアニメーション描画。
+  Compute Shader Skinning 版は GPU 上の skinned vertex buffer に書き出してから描画します。
 
 各サンプルには英語版 `README.md` と日本語版 `README.ja.md` を置いています。
 
@@ -60,9 +63,15 @@ Samples/<TechniqueName>/
   Vulkan/
     Source/
       <TechniqueName>Vulkan.vcxproj
+  D3D12Compute/
+    Source/
+      <TechniqueName>ComputeD3D12.vcxproj
+  VulkanCompute/
+    Source/
+      <TechniqueName>ComputeVulkan.vcxproj
 ```
 
-共有 HLSL は原則としてサンプルの `Shaders` フォルダに置きます。API 固有の差分が必要な場合だけ、プリプロセッサ定義や API 別シェーダで分けます。
+Compute 版のように別パイプラインとして比較したい実装は、同じソリューション内の兄弟プロジェクトとして追加します。共有 HLSL は原則としてサンプルの `Shaders` フォルダに置きます。API 固有の差分が必要な場合だけ、プリプロセッサ定義や API 別シェーダで分けます。
 
 ## Third Party
 
