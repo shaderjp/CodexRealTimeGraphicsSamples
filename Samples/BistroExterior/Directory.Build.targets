@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <Target Name="EnsureAssimpStaticLibrary" BeforeTargets="ClCompile">
+    <Error Condition="!Exists('$(AssimpRoot)\CMakeLists.txt')" Text="ThirdParty\assimp is missing. Run git submodule update --init --recursive ThirdParty/assimp." />
+    <Error Condition="!Exists('$(DirectXTexProject)')" Text="ThirdParty\DirectXTex is missing. Run git submodule update --init --recursive ThirdParty/DirectXTex." />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(CodexdSampleRoot)BuildThirdParty.ps1&quot; -AssimpRoot &quot;$(AssimpRoot)&quot; -AssimpBuildRoot &quot;$(AssimpBuildRoot)&quot; -AssimpLibName &quot;$(AssimpLibName)&quot; -DirectXTexProject &quot;$(DirectXTexProject)&quot; -DirectXTexLibDir &quot;$(DirectXTexLibDir)&quot; -Configuration &quot;$(Configuration)&quot; -MSBuildPath &quot;$(MSBuildToolsPath)\MSBuild.exe&quot;" />
+  </Target>
+</Project>

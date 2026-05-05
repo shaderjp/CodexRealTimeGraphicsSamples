@@ -1,0 +1,40 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BistroExterior", "BistroExterior", "{3190498A-57C2-4424-8F87-0B1F4EA7C5B1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorD3D12", "D3D12\Source\BistroExteriorD3D12.vcxproj", "{7B9F1507-69D1-4D56-AF9D-6B72661388D4}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorVulkan", "Vulkan\Source\BistroExteriorVulkan.vcxproj", "{E1F0C38C-99A7-4675-939D-1C23C19EE47A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectDependencies) = postSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.{E1F0C38C-99A7-4675-939D-1C23C19EE47A} = {E1F0C38C-99A7-4675-939D-1C23C19EE47A}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Debug|x64.ActiveCfg = Debug|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Debug|x64.Build.0 = Debug|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Release|x64.ActiveCfg = Release|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Release|x64.Build.0 = Release|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Debug|x64.ActiveCfg = Debug|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Debug|x64.Build.0 = Debug|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.ActiveCfg = Release|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {09765320-9622-445C-A2C9-77945095ED36}
+	EndGlobalSection
+EndGlobal

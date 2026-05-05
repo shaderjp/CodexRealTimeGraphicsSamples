@@ -7,11 +7,14 @@
 
 namespace
 {
+    constexpr float TriangleHalfWidth = 0.25f;
+    constexpr float TriangleHalfHeight = TriangleHalfWidth * (16.0f / 9.0f);
+
     const std::array<TriangleVulkan::Vertex, 3> Vertices =
     {{
-        { { 0.0f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        { { 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { -0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        { { 0.0f, -TriangleHalfHeight, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { TriangleHalfWidth, TriangleHalfHeight, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+        { { -TriangleHalfWidth, TriangleHalfHeight, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
     }};
 
     const std::vector<const char*> DeviceExtensions =

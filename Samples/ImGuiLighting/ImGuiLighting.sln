@@ -1,0 +1,37 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ImGuiLighting", "ImGuiLighting", "{BB7A649A-DC55-4538-9370-32D9510809BB}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImGuiLightingD3D12", "D3D12\Source\ImGuiLightingD3D12.vcxproj", "{78EAC8C1-E7F6-4DF7-9865-A6CA06385931}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImGuiLightingVulkan", "Vulkan\Source\ImGuiLightingVulkan.vcxproj", "{CEE3D54C-FCFD-420B-AE4E-F407194C6C88}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{78EAC8C1-E7F6-4DF7-9865-A6CA06385931}.Debug|x64.ActiveCfg = Debug|x64
+		{78EAC8C1-E7F6-4DF7-9865-A6CA06385931}.Debug|x64.Build.0 = Debug|x64
+		{78EAC8C1-E7F6-4DF7-9865-A6CA06385931}.Release|x64.ActiveCfg = Release|x64
+		{78EAC8C1-E7F6-4DF7-9865-A6CA06385931}.Release|x64.Build.0 = Release|x64
+		{CEE3D54C-FCFD-420B-AE4E-F407194C6C88}.Debug|x64.ActiveCfg = Debug|x64
+		{CEE3D54C-FCFD-420B-AE4E-F407194C6C88}.Debug|x64.Build.0 = Debug|x64
+		{CEE3D54C-FCFD-420B-AE4E-F407194C6C88}.Release|x64.ActiveCfg = Release|x64
+		{CEE3D54C-FCFD-420B-AE4E-F407194C6C88}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{78EAC8C1-E7F6-4DF7-9865-A6CA06385931} = {BB7A649A-DC55-4538-9370-32D9510809BB}
+		{CEE3D54C-FCFD-420B-AE4E-F407194C6C88} = {BB7A649A-DC55-4538-9370-32D9510809BB}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {672B1E62-F6F7-4681-B361-0E276575107F}
+	EndGlobalSection
+EndGlobal

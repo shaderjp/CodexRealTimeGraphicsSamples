@@ -64,6 +64,7 @@ compile_commands.json
 *.tmp
 *.log
 *.vcxproj.user
+imgui.ini
 UpgradeLog*.htm
 *.bak
 *.swp
@@ -75,6 +76,13 @@ UpgradeLog*.htm
 
 # vcpkg
 vcpkg_installed/
+
+# Large external sample assets
+Bistro_v5_2/
+Samples/BistroExterior/Assets/Bistro/
+DirectX-Graphics-Samples-master/
+glTF-Sample-Models-main/
+CesiumMan.gltf
 
 # debug information files
 *.dwo

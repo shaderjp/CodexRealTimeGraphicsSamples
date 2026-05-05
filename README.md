@@ -46,6 +46,14 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/SciFiHelmet/README.md`
 - `Samples/SciFiHelmet/D3D12/Source/SciFiHelmetD3D12.vcxproj`
 - `Samples/SciFiHelmet/Vulkan/Source/SciFiHelmetVulkan.vcxproj`
+- `Samples/ImGuiLighting/ImGuiLighting.sln`
+- `Samples/ImGuiLighting/README.md`
+- `Samples/ImGuiLighting/D3D12/Source/ImGuiLightingD3D12.vcxproj`
+- `Samples/ImGuiLighting/Vulkan/Source/ImGuiLightingVulkan.vcxproj`
+- `Samples/BistroExterior/BistroExterior.sln`
+- `Samples/BistroExterior/README.md`
+- `Samples/BistroExterior/D3D12/Source/BistroExteriorD3D12.vcxproj`
+- `Samples/BistroExterior/Vulkan/Source/BistroExteriorVulkan.vcxproj`
 - `Samples/Skinning/Skinning.sln`
 - `Samples/Skinning/README.md`
 - `Samples/Skinning/D3D12/Source/SkinningD3D12.vcxproj`
@@ -55,7 +63,15 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 `Samples/SciFiHelmet` loads the glTF 2.0 SciFiHelmet asset and renders it with a small metallic-roughness PBR shader, normal mapping, ambient occlusion, and one directional light.
 
+`Samples/ImGuiLighting` builds on the SciFiHelmet renderer and adds Dear ImGui controls for editing the directional light direction, color, and intensity.
+
+`Samples/BistroExterior` loads Amazon Lumberyard Bistro Exterior from an external `Bistro_v5_2` folder through Assimp, reads DDS/TGA textures through DirectXTex, and adds an FPS-style camera for navigating the large scene.
+
 `Samples/Skinning` loads the glTF 2.0 Cesium Man asset and renders animated vertex shader skinning or compute shader skinning with joint matrices. The compute variants write skinned vertices into a GPU buffer before the graphics pass.
+
+## Screenshot Gallery
+
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images`. `Samples/BistroExterior` also documents the ImGui `Debug View` modes, including Base Color, World Normal, Normal Texture Decoded, and NdotL comparison captures.
 
 ## Adding A Sample
 
