@@ -31,4 +31,5 @@ namespace Bistro
 
     TextureData LoadTextureRgba8(const std::wstring& path, bool srgb, const uint8_t fallback[4]);
     TextureData LoadTextureD3D12(const std::wstring& path, bool srgb, const uint8_t fallback[4]);
+    TextureData LoadTextureVulkan(const std::wstring& path, bool srgb, const uint8_t fallback[4], bool preserveBcCompressed);
 }

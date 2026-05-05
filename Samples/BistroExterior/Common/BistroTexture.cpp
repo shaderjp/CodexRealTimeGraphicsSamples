@@ -130,6 +130,32 @@ namespace
             return format;
         }
     }
+
+    bool IsVulkanPreservableFormat(DXGI_FORMAT format)
+    {
+        switch (format)
+        {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        case DXGI_FORMAT_BC1_UNORM:
+        case DXGI_FORMAT_BC1_UNORM_SRGB:
+        case DXGI_FORMAT_BC2_UNORM:
+        case DXGI_FORMAT_BC2_UNORM_SRGB:
+        case DXGI_FORMAT_BC3_UNORM:
+        case DXGI_FORMAT_BC3_UNORM_SRGB:
+        case DXGI_FORMAT_BC4_UNORM:
+        case DXGI_FORMAT_BC4_SNORM:
+        case DXGI_FORMAT_BC5_UNORM:
+        case DXGI_FORMAT_BC5_SNORM:
+        case DXGI_FORMAT_BC6H_UF16:
+        case DXGI_FORMAT_BC6H_SF16:
+        case DXGI_FORMAT_BC7_UNORM:
+        case DXGI_FORMAT_BC7_UNORM_SRGB:
+            return true;
+        default:
+            return false;
+        }
+    }
 }
 
 namespace Bistro
@@ -242,6 +268,44 @@ namespace Bistro
         }
 
         const DXGI_FORMAT outputFormat = srgb ? ToSrgbFormat(metadata.format) : ToLinearFormat(metadata.format);
+        try
+        {
+            return MakeTextureFromImageMemory(image.GetImages(), image.GetImageCount(), outputFormat);
+        }
+        catch (const std::runtime_error&)
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+    }
+
+    TextureData LoadTextureVulkan(const std::wstring& path, bool srgb, const uint8_t fallback[4], bool preserveBcCompressed)
+    {
+        if (path.empty() || !std::filesystem::exists(path))
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+
+        std::filesystem::path fsPath(path);
+        if (_wcsicmp(fsPath.extension().c_str(), L".dds") != 0)
+        {
+            return LoadTextureRgba8(path, srgb, fallback);
+        }
+
+        DirectX::TexMetadata metadata{};
+        DirectX::ScratchImage image;
+        HRESULT hr = DirectX::LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, &metadata, image);
+        if (FAILED(hr) || image.GetImageCount() == 0)
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+
+        const DXGI_FORMAT outputFormat = srgb ? ToSrgbFormat(metadata.format) : ToLinearFormat(metadata.format);
+        const bool canPreserve = IsVulkanPreservableFormat(outputFormat) && (!DirectX::IsCompressed(outputFormat) || preserveBcCompressed);
+        if (!canPreserve)
+        {
+            return LoadTextureRgba8(path, srgb, fallback);
+        }
+
         try
         {
             return MakeTextureFromImageMemory(image.GetImages(), image.GetImageCount(), outputFormat);
