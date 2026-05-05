@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <CodexdSampleRoot>$(MSBuildThisFileDirectory)</CodexdSampleRoot>
+    <CodexdOutputRoot>$(CodexdSampleRoot)Bin\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</CodexdOutputRoot>
+    <CodexdIntermediateRoot>$(CodexdSampleRoot)Obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</CodexdIntermediateRoot>
+    <CodexdRepoRoot>$(CodexdSampleRoot)..\..\</CodexdRepoRoot>
+    <AssimpRoot>$(CodexdRepoRoot)ThirdParty\assimp</AssimpRoot>
+    <AssimpBuildRoot>$(AssimpRoot)\Build\$(Platform)\$(Configuration)</AssimpBuildRoot>
+    <DirectXTexProject>$(CodexdRepoRoot)ThirdParty\DirectXTex\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj</DirectXTexProject>
+    <DirectXTexLibDir>$(CodexdRepoRoot)ThirdParty\DirectXTex\DirectXTex\Bin\Desktop_2022_Win10\x64\$(Configuration)</DirectXTexLibDir>
+    <AssimpLibName Condition="'$(Configuration)'=='Debug'">assimp-vc143-mtd.lib</AssimpLibName>
+    <AssimpLibName Condition="'$(Configuration)'=='Release'">assimp-vc143-mt.lib</AssimpLibName>
+  </PropertyGroup>
+</Project>

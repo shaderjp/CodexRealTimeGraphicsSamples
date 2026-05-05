@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{C3C1DE1B-6F4B-4AA8-9E36-94B52F123519}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{507C9291-787C-47A7-A89D-6F6738423BF7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{632A281A-5E78-4C69-A009-F03FB88A12C0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{4B3763B5-41D6-4EC0-928D-A9D050B3CFD1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImGuiLightingVulkan.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\imgui.h"><Filter>ThirdParty</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_vulkan.h"><Filter>ThirdParty</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_win32.h"><Filter>ThirdParty</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ImGuiLightingVulkan.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Main.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_tables.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_widgets.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_vulkan.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>ThirdParty</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\ImGuiLighting.hlsl"><Filter>Shaders</Filter></CustomBuild>
+  </ItemGroup>
+</Project>

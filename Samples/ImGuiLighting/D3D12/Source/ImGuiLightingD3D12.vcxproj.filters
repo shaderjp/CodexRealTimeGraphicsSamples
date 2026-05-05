@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{38B4DD15-61E6-4919-B716-E34AF7D188D5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{AF208A67-DB01-4629-827C-8B14B2598B75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{568C0955-065B-445E-98FE-41DFB3EBD124}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{1D64D755-C50B-4820-B640-8D1E6EB7E4AE}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImGuiLightingD3D12.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="DXSample.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="DXSampleHelper.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="stdafx.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Win32Application.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\imgui.h"><Filter>ThirdParty</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_dx12.h"><Filter>ThirdParty</Filter></ClInclude>
+    <ClInclude Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_win32.h"><Filter>ThirdParty</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ImGuiLightingD3D12.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="DXSample.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Main.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="stdafx.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Win32Application.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_tables.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\imgui_widgets.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\..\..\..\ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>ThirdParty</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\ImGuiLighting.hlsl"><Filter>Shaders</Filter></CustomBuild>
+  </ItemGroup>
+</Project>
