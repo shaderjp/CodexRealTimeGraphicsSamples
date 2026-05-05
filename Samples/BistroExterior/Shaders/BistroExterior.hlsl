@@ -77,6 +77,22 @@ float3 FresnelSchlick(float cosTheta, float3 f0)
     return f0 + (1.0f - f0) * pow(1.0f - saturate(cosTheta), 5.0f);
 }
 
+float3 DebugColorVector(float3 value)
+{
+    return normalize(value) * 0.5f + 0.5f;
+}
+
+float3 SampleDebuggableNormalTexture(float2 texcoord)
+{
+    float forcedMip = g_scene.debugOptions.z;
+    float mipBias = g_scene.debugOptions.w;
+    if (forcedMip >= 0.0f)
+    {
+        return g_normalTexture.SampleLevel(g_linearSampler, texcoord, forcedMip).xyz;
+    }
+    return g_normalTexture.SampleBias(g_linearSampler, texcoord, mipBias).xyz;
+}
+
 PSInput VSMain(VSInput input)
 {
     PSInput result;
@@ -103,7 +119,7 @@ float4 PSMain(PSInput input) : SV_TARGET
     float metallic = saturate(specularPacked.b);
     float3 emissive = g_emissiveTexture.Sample(g_linearSampler, input.texcoord).rgb;
 
-    float3 normalTexture = g_normalTexture.Sample(g_linearSampler, input.texcoord).xyz;
+    float3 normalTexture = SampleDebuggableNormalTexture(input.texcoord);
     float2 normalXY = normalTexture.xy * 2.0f - 1.0f;
     normalXY.y *= g_scene.debugOptions.y > 0.5f ? -1.0f : 1.0f;
     float3 normalSample = float3(normalXY, sqrt(saturate(1.0f - dot(normalXY, normalXY))));
@@ -148,6 +164,55 @@ float4 PSMain(PSInput input) : SV_TARGET
     if (debugMode == 6)
     {
         return float4(nDotL.xxx, 1.0f);
+    }
+    if (debugMode == 7)
+    {
+        return float4(specularPacked.rgb, 1.0f);
+    }
+    if (debugMode == 8)
+    {
+        return float4(emissive, 1.0f);
+    }
+    if (debugMode == 9)
+    {
+        return float4(DebugColorVector(n), 1.0f);
+    }
+    if (debugMode == 10)
+    {
+        return float4(DebugColorVector(t), 1.0f);
+    }
+    if (debugMode == 11)
+    {
+        return float4(DebugColorVector(b), 1.0f);
+    }
+    if (debugMode == 12)
+    {
+        return input.tangent.w >= 0.0f ? float4(0.1f, 0.8f, 0.1f, 1.0f) : float4(0.9f, 0.1f, 0.1f, 1.0f);
+    }
+    if (debugMode == 13)
+    {
+        float mipLevel = g_scene.debugOptions.z >= 0.0f ? g_scene.debugOptions.z : g_normalTexture.CalculateLevelOfDetail(g_linearSampler, input.texcoord) + g_scene.debugOptions.w;
+        return float4(saturate(mipLevel / 10.0f).xxx, 1.0f);
+    }
+    if (debugMode == 14)
+    {
+        return float4(input.texcoord.x, input.texcoord.y, 0.0f, 1.0f);
+    }
+    if (debugMode == 15)
+    {
+        return float4((baseSample.a * g_material.baseColorFactor.a).xxx, 1.0f);
+    }
+    if (debugMode == 16)
+    {
+        uint width = 0;
+        uint height = 0;
+        uint mipLevels = 0;
+        g_normalTexture.GetDimensions(0, width, height, mipLevels);
+        if (width <= 1 || height <= 1)
+        {
+            return float4(0.95f, 0.1f, 0.1f, 1.0f);
+        }
+        return float4(0.1f, saturate((float)mipLevels / 10.0f), 0.95f, 1.0f);
     }
 
     float3 specular = (distribution * geometry * fresnel) / max(4.0f * nDotV * nDotL, 0.0001f);

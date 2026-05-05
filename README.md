@@ -71,7 +71,7 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 ## Screenshot Gallery
 
-Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images`. `Samples/BistroExterior` also documents the ImGui `Debug View` modes, including Base Color, World Normal, Normal Texture Decoded, and NdotL comparison captures.
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images`. `Samples/BistroExterior` also documents the ImGui `Debug View` modes, including Base Color, World Normal, and Normal Texture Decoded comparison captures, plus the `Renderer Stats` overlay.
 
 ## Adding A Sample
 

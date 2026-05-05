@@ -717,6 +717,10 @@ uint32_t BistroExteriorVulkan::CreateTextureResource(const std::wstring& path, b
     vkUnmapMemory(m_device, stagingBufferMemory);
 
     GpuTexture texture;
+    texture.path = path;
+    texture.width = image.width;
+    texture.height = image.height;
+    texture.fallback = image.fallback;
     texture.format = ToVkFormat(image.format);
     texture.mipLevels = image.mipLevels;
     CreateImage(image.width, image.height, texture.mipLevels, texture.format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, texture.image, texture.memory);
@@ -979,14 +983,90 @@ void BistroExteriorVulkan::BuildUI()
         "Normal Texture Raw",
         "Normal Texture Decoded",
         "AO / Roughness / Metallic",
-        "NdotL"
+        "NdotL",
+        "Specular Texture Raw",
+        "Emissive Texture",
+        "Vertex Normal",
+        "Vertex Tangent",
+        "Vertex Bitangent",
+        "Tangent Handedness",
+        "Normal Mip Level",
+        "UV",
+        "Alpha",
+        "Normal Texture Status"
     };
     ImGui::Combo("Mode", &m_debugViewMode, debugModes, _countof(debugModes));
     ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip);
+    ImGui::SliderInt("Force Normal Mip", &m_debugNormalForceMip, -1, 10);
+    ImGui::SliderFloat("Normal Mip Bias", &m_debugNormalMipBias, -4.0f, 4.0f, "%.2f");
+    if (ImGui::Button("Reset Normal Sampling"))
+    {
+        m_debugNormalForceMip = 0;
+        m_debugNormalMipBias = 0.0f;
+    }
+    ImGui::Text("Force -1 uses sampler LOD");
     ImGui::PopItemWidth();
     ImGui::End();
 
+    BuildRendererStatsUI();
+
     ImGui::Render();
+}
+
+void BistroExteriorVulkan::BuildRendererStatsUI()
+{
+    int normalTextureCount = 0;
+    int normalFallbackCount = 0;
+    int normalOnePixelCount = 0;
+    for (const Bistro::Material& material : m_scene.materials)
+    {
+        const size_t materialIndex = &material - m_scene.materials.data();
+        if (!material.textures[Bistro::TextureSlotNormal].empty())
+        {
+            ++normalTextureCount;
+        }
+        if (materialIndex < m_materialTextureIndices.size())
+        {
+            const GpuTexture& normalTexture = m_textures[m_materialTextureIndices[materialIndex][Bistro::TextureSlotNormal]];
+            normalFallbackCount += normalTexture.fallback ? 1 : 0;
+            normalOnePixelCount += normalTexture.width <= 1 || normalTexture.height <= 1 ? 1 : 0;
+        }
+    }
+
+    uint64_t primitiveCount = 0;
+    uint64_t submittedIndexCount = 0;
+    for (const Bistro::DrawItem& draw : m_scene.draws)
+    {
+        submittedIndexCount += draw.indexCount;
+        primitiveCount += draw.indexCount / 3;
+    }
+
+    const ImGuiIO& io = ImGui::GetIO();
+    const float fps = io.Framerate;
+    const float frameTimeMs = fps > 0.0f ? 1000.0f / fps : 0.0f;
+
+    ImGui::SetNextWindowPos(ImVec2(430.0f, 48.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 300.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Renderer Stats");
+    ImGui::TextUnformatted("Frame");
+    ImGui::Text("API: Vulkan");
+    ImGui::Text("FPS: %.1f", fps);
+    ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
+    ImGui::Separator();
+    ImGui::TextUnformatted("Scene");
+    ImGui::Text("Materials: %zu", m_scene.materials.size());
+    ImGui::Text("Draw Calls: %zu", m_scene.draws.size());
+    ImGui::Text("Vertices: %zu", m_scene.vertices.size());
+    ImGui::Text("Indices: %zu", m_scene.indices.size());
+    ImGui::Text("Submitted Indices: %llu", static_cast<unsigned long long>(submittedIndexCount));
+    ImGui::Text("Primitives: %llu", static_cast<unsigned long long>(primitiveCount));
+    ImGui::Text("Textures: %zu", m_textures.size());
+    ImGui::Separator();
+    ImGui::TextUnformatted("Texture Diagnostics");
+    ImGui::Text("Normal Maps: %d / %zu", normalTextureCount, m_scene.materials.size());
+    ImGui::Text("Normal Fallbacks: %d", normalFallbackCount);
+    ImGui::Text("Normal 1x1 SRVs: %d", normalOnePixelCount);
+    ImGui::End();
 }
 
 void BistroExteriorVulkan::ResetLight()
@@ -1110,7 +1190,7 @@ void BistroExteriorVulkan::UpdateUniformBuffer()
     m_lightDirection[2] = normalizedLightDirection.z;
     constants.lightDirection = XMFLOAT4(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], 0.0f);
     constants.lightColor = XMFLOAT4(m_lightColor[0], m_lightColor[1], m_lightColor[2], m_lightIntensity);
-    constants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, 0.0f, 0.0f);
+    constants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, static_cast<float>(m_debugNormalForceMip), m_debugNormalMipBias);
 
     void* data = nullptr;
     vkMapMemory(m_device, m_sceneUniformBufferMemory, 0, sizeof(constants), 0, &data);

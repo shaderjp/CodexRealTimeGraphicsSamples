@@ -24,9 +24,11 @@ namespace Bistro
         uint32_t height = 1;
         uint32_t mipLevels = 1;
         DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        bool fallback = false;
         std::vector<TextureMip> mips;
         std::vector<uint8_t> pixels;
     };
 
     TextureData LoadTextureRgba8(const std::wstring& path, bool srgb, const uint8_t fallback[4]);
+    TextureData LoadTextureD3D12(const std::wstring& path, bool srgb, const uint8_t fallback[4]);
 }

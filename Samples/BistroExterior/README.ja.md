@@ -27,16 +27,15 @@
 
 | Direct3D12 | Vulkan |
 | --- | --- |
-| ![BistroExterior D3D12 Final](../../docs/images/BistroExterior%20D3D12%202026_05_05%2012_29_22.png) | ![BistroExterior Vulkan Final](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2012_27_21.png) |
+| ![BistroExterior D3D12 Final](../../docs/images/BistroExterior%20D3D12%202026_05_05%2018_46_41.png) | ![BistroExterior Vulkan Final](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2018_45_55.png) |
 
-`Bistro Controls` の ImGui ウィンドウにある `Debug View` コンボボックスで、最終描画と各種デバッグ表示を切り替えられます。D3D12 / Vulkan の見え方比較やシェーダ確認に使います。
+`Bistro Controls` の ImGui ウィンドウにある `Debug View` コンボボックスで、最終描画と各種デバッグ表示を切り替えられます。D3D12 / Vulkan の見え方比較やシェーダ確認に使います。`Renderer Stats` ウィンドウでは FPS、フレーム時間、draw call、頂点数、インデックス数、プリミティブ数、テクスチャ数、normal map 診断を確認できます。
 
 | Debug View | Direct3D12 | Vulkan |
 | --- | --- | --- |
-| Base Color | ![BistroExterior D3D12 Base Color](../../docs/images/BistroExterior%20D3D12%202026_05_05%2012_29_28.png) | ![BistroExterior Vulkan Base Color](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2012_27_28.png) |
-| World Normal | ![BistroExterior D3D12 World Normal](../../docs/images/BistroExterior%20D3D12%202026_05_05%2012_29_35.png) | ![BistroExterior Vulkan World Normal](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2012_27_37.png) |
-| Normal Texture Decoded | ![BistroExterior D3D12 Normal Texture Decoded](../../docs/images/BistroExterior%20D3D12%202026_05_05%2012_29_55.png) | ![BistroExterior Vulkan Normal Texture Decoded](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2012_27_46.png) |
-| NdotL | ![BistroExterior D3D12 NdotL](../../docs/images/BistroExterior%20D3D12%202026_05_05%2012_30_04.png) | ![BistroExterior Vulkan NdotL](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2012_28_03.png) |
+| Base Color | ![BistroExterior D3D12 Base Color](../../docs/images/BistroExterior%20D3D12%202026_05_05%2018_42_36.png) | ![BistroExterior Vulkan Base Color](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2018_46_02.png) |
+| World Normal | ![BistroExterior D3D12 World Normal](../../docs/images/BistroExterior%20D3D12%202026_05_05%2018_47_06.png) | ![BistroExterior Vulkan World Normal](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2018_46_07.png) |
+| Normal Texture Decoded | ![BistroExterior D3D12 Normal Texture Decoded](../../docs/images/BistroExterior%20D3D12%202026_05_05%2018_46_58.png) | ![BistroExterior Vulkan Normal Texture Decoded](../../docs/images/BistroExterior%20Vulkan%202026_05_05%2018_46_17.png) |
 
 ## アセット
 
