@@ -9,6 +9,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorD3D12", "D3D1
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorVulkan", "Vulkan\Source\BistroExteriorVulkan.vcxproj", "{E1F0C38C-99A7-4675-939D-1C23C19EE47A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorShadowD3D12", "D3D12Shadow\Source\BistroExteriorShadowD3D12.vcxproj", "{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorShadowVulkan", "VulkanShadow\Source\BistroExteriorShadowVulkan.vcxproj", "{DA98B25C-1A3F-4DFB-81A7-B6824898F741}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -26,6 +30,14 @@ Global
 		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Debug|x64.Build.0 = Debug|x64
 		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.ActiveCfg = Release|x64
 		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.Build.0 = Release|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Debug|x64.ActiveCfg = Debug|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Debug|x64.Build.0 = Debug|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Release|x64.ActiveCfg = Release|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Release|x64.Build.0 = Release|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Debug|x64.ActiveCfg = Debug|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Debug|x64.Build.0 = Debug|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Release|x64.ActiveCfg = Release|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -33,6 +45,8 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{7B9F1507-69D1-4D56-AF9D-6B72661388D4} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
 		{E1F0C38C-99A7-4675-939D-1C23C19EE47A} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {09765320-9622-445C-A2C9-77945095ED36}

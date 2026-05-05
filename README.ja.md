@@ -41,7 +41,7 @@ git submodule update --init --recursive
 - `Samples/ImGuiLighting`
   SciFiHelmet の描画に Dear ImGui を統合し、ディレクショナルライトの方向、色、強度を実行時に編集。
 - `Samples/BistroExterior`
-  Amazon Lumberyard Bistro Exterior を外部の `Bistro_v5_2` フォルダから Assimp で読み込み、DirectXTex で DDS/TGA テクスチャを扱い、広いシーンを FPS 風カメラで移動しながら描画。
+  Amazon Lumberyard Bistro Exterior を外部の `Bistro_v5_2` フォルダから Assimp で読み込み、DirectXTex で DDS/TGA テクスチャを扱い、広いシーンを FPS 風カメラで移動しながら描画。D3D12 / Vulkan の Shadow Map 版も同じソリューションに含み、ImGui からディレクショナルライト shadow のパラメータとデバッグ表示を操作できます。
 - `Samples/Skinning`
   glTF 2.0 Cesium Man を読み込み、Joint Matrix の Constant Buffer を使った Vertex Shader Skinning / Compute Shader Skinning でアニメーション描画。
   Compute Shader Skinning 版は GPU 上の skinned vertex buffer に書き出してから描画します。
@@ -50,7 +50,7 @@ git submodule update --init --recursive
 
 ## スクリーンショット
 
-各サンプル README に `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded の比較画像と、`Renderer Stats` オーバーレイも掲載しています。
+各サンプル README に `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。
 
 ## サンプル追加方針
 

@@ -21,11 +21,11 @@
 #include <string>
 #include <vector>
 
-class BistroExteriorVulkan
+class BistroExteriorShadowVulkan
 {
 public:
-    BistroExteriorVulkan(uint32_t width, uint32_t height, const wchar_t* title);
-    ~BistroExteriorVulkan();
+    BistroExteriorShadowVulkan(uint32_t width, uint32_t height, const wchar_t* title);
+    ~BistroExteriorShadowVulkan();
 
     int Run(HINSTANCE instance, int showCommand);
 
@@ -48,10 +48,12 @@ private:
     struct SceneConstants
     {
         DirectX::XMFLOAT4X4 viewProjection;
+        DirectX::XMFLOAT4X4 lightViewProjection;
         DirectX::XMFLOAT4 cameraPosition;
         DirectX::XMFLOAT4 lightDirection;
         DirectX::XMFLOAT4 lightColor;
         DirectX::XMFLOAT4 debugOptions;
+        DirectX::XMFLOAT4 shadowOptions;
     };
 
     struct MaterialConstants
@@ -92,9 +94,15 @@ private:
     void CreateSwapChain();
     void CreateImageViews();
     void CreateRenderPass();
+    void CreateShadowRenderPass();
     void CreateDescriptorSetLayout();
     void CreateGraphicsPipeline();
+    void CreateShadowPipeline();
     void CreateDepthResources();
+    void CreateShadowResources();
+    void DestroyShadowResources();
+    void RecreateShadowResources();
+    void UpdateShadowDescriptorSets();
     void CreateFramebuffers();
     void CreateCommandPool();
     void LoadModel();
@@ -112,6 +120,7 @@ private:
     void ResetLight();
     void ResetCameraView();
     void ResetCameraSpeeds();
+    void ResetShadowSettings();
     void CreateCommandBuffers();
     void RecordCommandBuffer(uint32_t imageIndex);
     void CreateSyncObjects();
@@ -156,12 +165,19 @@ private:
     VkFormat m_swapChainImageFormat = VK_FORMAT_UNDEFINED;
     VkExtent2D m_swapChainExtent{};
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
+    VkRenderPass m_shadowRenderPass = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
+    VkPipeline m_shadowPipeline = VK_NULL_HANDLE;
     VkImage m_depthImage = VK_NULL_HANDLE;
     VkDeviceMemory m_depthImageMemory = VK_NULL_HANDLE;
     VkImageView m_depthImageView = VK_NULL_HANDLE;
+    VkImage m_shadowDepthImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_shadowDepthImageMemory = VK_NULL_HANDLE;
+    VkImageView m_shadowDepthImageView = VK_NULL_HANDLE;
+    VkFramebuffer m_shadowFramebuffer = VK_NULL_HANDLE;
+    VkSampler m_shadowSampler = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> m_framebuffers;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> m_commandBuffers;
@@ -195,6 +211,16 @@ private:
     bool m_debugNormalMapYFlip = true;
     int m_debugNormalForceMip = 0;
     float m_debugNormalMipBias = 0.0f;
+    bool m_shadowsEnabled = true;
+    int m_shadowResolutionIndex = 1;
+    uint32_t m_shadowResolution = 2048;
+    float m_shadowDepthBias = 0.002f;
+    float m_shadowNormalBias = 0.05f;
+    int m_shadowPcfRadius = 1;
+    float m_shadowOrthoSize = 50.0f;
+    float m_shadowFocusDistance = 25.0f;
+    float m_shadowDepthRange = 160.0f;
+    bool m_shadowResourcesDirty = false;
     bool m_samplerAnisotropySupported = false;
     bool m_textureCompressionBcSupported = false;
     float m_maxSamplerAnisotropy = 1.0f;

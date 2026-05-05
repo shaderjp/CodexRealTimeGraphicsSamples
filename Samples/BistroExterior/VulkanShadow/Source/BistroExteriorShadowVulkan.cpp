@@ -1,4 +1,4 @@
-#include "BistroExteriorVulkan.h"
+#include "BistroExteriorShadowVulkan.h"
 #include "..\..\Common\BistroTexture.h"
 
 #include "imgui.h"
@@ -6,6 +6,7 @@
 #include "backends/imgui_impl_win32.h"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <set>
 #include <stdexcept>
@@ -63,24 +64,24 @@ namespace
     }
 }
 
-bool BistroExteriorVulkan::QueueFamilyIndices::IsComplete() const
+bool BistroExteriorShadowVulkan::QueueFamilyIndices::IsComplete() const
 {
     return graphicsFamily != UINT32_MAX && presentFamily != UINT32_MAX;
 }
 
-BistroExteriorVulkan::BistroExteriorVulkan(uint32_t width, uint32_t height, const wchar_t* title) :
+BistroExteriorShadowVulkan::BistroExteriorShadowVulkan(uint32_t width, uint32_t height, const wchar_t* title) :
     m_width(width),
     m_height(height),
     m_title(title)
 {
 }
 
-BistroExteriorVulkan::~BistroExteriorVulkan()
+BistroExteriorShadowVulkan::~BistroExteriorShadowVulkan()
 {
     Cleanup();
 }
 
-int BistroExteriorVulkan::Run(HINSTANCE instance, int showCommand)
+int BistroExteriorShadowVulkan::Run(HINSTANCE instance, int showCommand)
 {
     HRESULT coResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(coResult))
@@ -95,18 +96,18 @@ int BistroExteriorVulkan::Run(HINSTANCE instance, int showCommand)
     return 0;
 }
 
-LRESULT CALLBACK BistroExteriorVulkan::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK BistroExteriorShadowVulkan::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, message, wParam, lParam))
     {
         return true;
     }
 
-    BistroExteriorVulkan* app = reinterpret_cast<BistroExteriorVulkan*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    BistroExteriorShadowVulkan* app = reinterpret_cast<BistroExteriorShadowVulkan*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
     if (message == WM_NCCREATE)
     {
         auto* createStruct = reinterpret_cast<CREATESTRUCT*>(lParam);
-        app = reinterpret_cast<BistroExteriorVulkan*>(createStruct->lpCreateParams);
+        app = reinterpret_cast<BistroExteriorShadowVulkan*>(createStruct->lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
     }
 
@@ -127,7 +128,7 @@ LRESULT CALLBACK BistroExteriorVulkan::WindowProc(HWND hwnd, UINT message, WPARA
     return DefWindowProc(hwnd, message, wParam, lParam);
 }
 
-void BistroExteriorVulkan::InitWindow(HINSTANCE instance, int showCommand)
+void BistroExteriorShadowVulkan::InitWindow(HINSTANCE instance, int showCommand)
 {
     m_instanceHandle = instance;
 
@@ -137,7 +138,7 @@ void BistroExteriorVulkan::InitWindow(HINSTANCE instance, int showCommand)
     windowClass.lpfnWndProc = WindowProc;
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    windowClass.lpszClassName = L"BistroExteriorVulkanWindowClass";
+    windowClass.lpszClassName = L"BistroExteriorShadowVulkanWindowClass";
     RegisterClassExW(&windowClass);
 
     RECT rect = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };
@@ -152,7 +153,7 @@ void BistroExteriorVulkan::InitWindow(HINSTANCE instance, int showCommand)
     ShowWindow(m_hwnd, showCommand);
 }
 
-void BistroExteriorVulkan::InitVulkan()
+void BistroExteriorShadowVulkan::InitVulkan()
 {
     LoadModel();
     CreateInstance();
@@ -162,11 +163,13 @@ void BistroExteriorVulkan::InitVulkan()
     CreateSwapChain();
     CreateImageViews();
     CreateRenderPass();
+    CreateShadowRenderPass();
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline();
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandPool();
+    CreateShadowResources();
     CreateVertexBuffer();
     CreateIndexBuffer();
     CreateTextureImages();
@@ -180,7 +183,7 @@ void BistroExteriorVulkan::InitVulkan()
     m_lastUpdate = std::chrono::steady_clock::now();
 }
 
-void BistroExteriorVulkan::MainLoop()
+void BistroExteriorShadowVulkan::MainLoop()
 {
     MSG message{};
     while (message.message != WM_QUIT)
@@ -197,10 +200,15 @@ void BistroExteriorVulkan::MainLoop()
     }
 }
 
-void BistroExteriorVulkan::Render()
+void BistroExteriorShadowVulkan::Render()
 {
     vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
     BuildUI();
+    if (m_shadowResourcesDirty)
+    {
+        RecreateShadowResources();
+        m_shadowResourcesDirty = false;
+    }
     UpdateUniformBuffer();
 
     uint32_t imageIndex = 0;
@@ -241,7 +249,7 @@ void BistroExteriorVulkan::Render()
     m_currentFrame = (m_currentFrame + 1) % MaxFramesInFlight;
 }
 
-void BistroExteriorVulkan::WaitIdle()
+void BistroExteriorShadowVulkan::WaitIdle()
 {
     if (m_device != VK_NULL_HANDLE)
     {
@@ -249,7 +257,7 @@ void BistroExteriorVulkan::WaitIdle()
     }
 }
 
-void BistroExteriorVulkan::Cleanup()
+void BistroExteriorShadowVulkan::Cleanup()
 {
     if (m_device != VK_NULL_HANDLE)
     {
@@ -285,12 +293,15 @@ void BistroExteriorVulkan::Cleanup()
         {
             vkDestroyFramebuffer(m_device, framebuffer, nullptr);
         }
+        DestroyShadowResources();
         if (m_depthImageView) vkDestroyImageView(m_device, m_depthImageView, nullptr);
         if (m_depthImage) vkDestroyImage(m_device, m_depthImage, nullptr);
         if (m_depthImageMemory) vkFreeMemory(m_device, m_depthImageMemory, nullptr);
+        if (m_shadowPipeline) vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
         if (m_graphicsPipeline) vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
         if (m_pipelineLayout) vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
         if (m_descriptorSetLayout) vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+        if (m_shadowRenderPass) vkDestroyRenderPass(m_device, m_shadowRenderPass, nullptr);
         if (m_renderPass) vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 
         for (VkImageView imageView : m_swapChainImageViews)
@@ -307,11 +318,11 @@ void BistroExteriorVulkan::Cleanup()
     if (m_hwnd) DestroyWindow(m_hwnd);
 }
 
-void BistroExteriorVulkan::CreateInstance()
+void BistroExteriorShadowVulkan::CreateInstance()
 {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "BistroExterior Vulkan";
+    appInfo.pApplicationName = "BistroExterior Shadow Vulkan";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "CodexdRealTimeGraphicsSamples";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -326,7 +337,7 @@ void BistroExteriorVulkan::CreateInstance()
     ThrowIfFailed(vkCreateInstance(&createInfo, nullptr, &m_instance), "Failed to create Vulkan instance.");
 }
 
-void BistroExteriorVulkan::CreateSurface()
+void BistroExteriorShadowVulkan::CreateSurface()
 {
     VkWin32SurfaceCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -335,7 +346,7 @@ void BistroExteriorVulkan::CreateSurface()
     ThrowIfFailed(vkCreateWin32SurfaceKHR(m_instance, &createInfo, nullptr, &m_surface), "Failed to create Win32 surface.");
 }
 
-void BistroExteriorVulkan::PickPhysicalDevice()
+void BistroExteriorShadowVulkan::PickPhysicalDevice()
 {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
@@ -358,7 +369,7 @@ void BistroExteriorVulkan::PickPhysicalDevice()
     throw std::runtime_error("No suitable Vulkan device was found.");
 }
 
-void BistroExteriorVulkan::CreateLogicalDevice()
+void BistroExteriorShadowVulkan::CreateLogicalDevice()
 {
     QueueFamilyIndices indices = FindQueueFamilies(m_physicalDevice);
     std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
@@ -398,7 +409,7 @@ void BistroExteriorVulkan::CreateLogicalDevice()
     vkGetDeviceQueue(m_device, indices.presentFamily, 0, &m_presentQueue);
 }
 
-void BistroExteriorVulkan::CreateSwapChain()
+void BistroExteriorShadowVulkan::CreateSwapChain()
 {
     SwapChainSupport support = QuerySwapChainSupport(m_physicalDevice);
     VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(support.formats);
@@ -448,7 +459,7 @@ void BistroExteriorVulkan::CreateSwapChain()
     m_swapChainExtent = extent;
 }
 
-void BistroExteriorVulkan::CreateImageViews()
+void BistroExteriorShadowVulkan::CreateImageViews()
 {
     m_swapChainImageViews.resize(m_swapChainImages.size());
     for (size_t i = 0; i < m_swapChainImages.size(); ++i)
@@ -457,7 +468,7 @@ void BistroExteriorVulkan::CreateImageViews()
     }
 }
 
-void BistroExteriorVulkan::CreateRenderPass()
+void BistroExteriorShadowVulkan::CreateRenderPass()
 {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = m_swapChainImageFormat;
@@ -512,9 +523,57 @@ void BistroExteriorVulkan::CreateRenderPass()
     ThrowIfFailed(vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_renderPass), "Failed to create render pass.");
 }
 
-void BistroExteriorVulkan::CreateDescriptorSetLayout()
+void BistroExteriorShadowVulkan::CreateShadowRenderPass()
 {
-    std::array<VkDescriptorSetLayoutBinding, 7> bindings{};
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = DepthFormat;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.attachment = 0;
+    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    std::array<VkSubpassDependency, 2> dependencies{};
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &depthAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
+    ThrowIfFailed(vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_shadowRenderPass), "Failed to create shadow render pass.");
+}
+
+void BistroExteriorShadowVulkan::CreateDescriptorSetLayout()
+{
+    std::array<VkDescriptorSetLayoutBinding, 9> bindings{};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].descriptorCount = 1;
@@ -538,6 +597,16 @@ void BistroExteriorVulkan::CreateDescriptorSetLayout()
     bindings[6].descriptorCount = 1;
     bindings[6].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    bindings[7].binding = 7;
+    bindings[7].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    bindings[7].descriptorCount = 1;
+    bindings[7].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    bindings[8].binding = 8;
+    bindings[8].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[8].descriptorCount = 1;
+    bindings[8].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -545,11 +614,11 @@ void BistroExteriorVulkan::CreateDescriptorSetLayout()
     ThrowIfFailed(vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_descriptorSetLayout), "Failed to create descriptor set layout.");
 }
 
-void BistroExteriorVulkan::CreateGraphicsPipeline()
+void BistroExteriorShadowVulkan::CreateGraphicsPipeline()
 {
     std::wstring shaderDirectory = GetExecutableDirectory();
-    VkShaderModule vertexShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExterior.vs.spv"));
-    VkShaderModule pixelShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExterior.ps.spv"));
+    VkShaderModule vertexShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorShadow.vs.spv"));
+    VkShaderModule pixelShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorShadow.ps.spv"));
 
     VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
     vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -664,15 +733,189 @@ void BistroExteriorVulkan::CreateGraphicsPipeline()
 
     vkDestroyShaderModule(m_device, pixelShaderModule, nullptr);
     vkDestroyShaderModule(m_device, vertexShaderModule, nullptr);
+
+    CreateShadowPipeline();
 }
 
-void BistroExteriorVulkan::CreateDepthResources()
+void BistroExteriorShadowVulkan::CreateShadowPipeline()
+{
+    if (m_shadowPipeline)
+    {
+        vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
+        m_shadowPipeline = VK_NULL_HANDLE;
+    }
+
+    std::wstring shaderDirectory = GetExecutableDirectory();
+    VkShaderModule vertexShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorShadow.shadow.vs.spv"));
+    VkShaderModule pixelShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorShadow.shadow.ps.spv"));
+
+    VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
+    vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexShaderStageInfo.module = vertexShaderModule;
+    vertexShaderStageInfo.pName = "VSShadowMain";
+
+    VkPipelineShaderStageCreateInfo pixelShaderStageInfo{};
+    pixelShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pixelShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pixelShaderStageInfo.module = pixelShaderModule;
+    pixelShaderStageInfo.pName = "PSShadowMain";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShaderStageInfo, pixelShaderStageInfo };
+
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Bistro::Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Bistro::Vertex, position);
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Bistro::Vertex, normal);
+    attributeDescriptions[2].binding = 0;
+    attributeDescriptions[2].location = 2;
+    attributeDescriptions[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributeDescriptions[2].offset = offsetof(Bistro::Vertex, tangent);
+    attributeDescriptions[3].binding = 0;
+    attributeDescriptions[3].location = 3;
+    attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[3].offset = offsetof(Bistro::Vertex, texcoord);
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.depthBiasEnable = VK_TRUE;
+    rasterizer.depthBiasConstantFactor = 1.25f;
+    rasterizer.depthBiasSlopeFactor = 2.0f;
+    rasterizer.depthBiasClamp = 0.01f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(std::size(dynamicStates));
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = m_pipelineLayout;
+    pipelineInfo.renderPass = m_shadowRenderPass;
+    pipelineInfo.subpass = 0;
+    ThrowIfFailed(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_shadowPipeline), "Failed to create shadow pipeline.");
+
+    vkDestroyShaderModule(m_device, pixelShaderModule, nullptr);
+    vkDestroyShaderModule(m_device, vertexShaderModule, nullptr);
+}
+
+void BistroExteriorShadowVulkan::CreateDepthResources()
 {
     CreateImage(m_swapChainExtent.width, m_swapChainExtent.height, 1, DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, m_depthImage, m_depthImageMemory);
     m_depthImageView = CreateImageView(m_depthImage, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 }
 
-void BistroExteriorVulkan::CreateFramebuffers()
+void BistroExteriorShadowVulkan::CreateShadowResources()
+{
+    CreateImage(
+        m_shadowResolution,
+        m_shadowResolution,
+        1,
+        DepthFormat,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        m_shadowDepthImage,
+        m_shadowDepthImageMemory);
+    m_shadowDepthImageView = CreateImageView(m_shadowDepthImage, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.compareEnable = VK_TRUE;
+    samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    ThrowIfFailed(vkCreateSampler(m_device, &samplerInfo, nullptr, &m_shadowSampler), "Failed to create shadow sampler.");
+
+    VkFramebufferCreateInfo framebufferInfo{};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = m_shadowRenderPass;
+    framebufferInfo.attachmentCount = 1;
+    framebufferInfo.pAttachments = &m_shadowDepthImageView;
+    framebufferInfo.width = m_shadowResolution;
+    framebufferInfo.height = m_shadowResolution;
+    framebufferInfo.layers = 1;
+    ThrowIfFailed(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_shadowFramebuffer), "Failed to create shadow framebuffer.");
+}
+
+void BistroExteriorShadowVulkan::DestroyShadowResources()
+{
+    if (m_shadowFramebuffer) vkDestroyFramebuffer(m_device, m_shadowFramebuffer, nullptr);
+    m_shadowFramebuffer = VK_NULL_HANDLE;
+    if (m_shadowSampler) vkDestroySampler(m_device, m_shadowSampler, nullptr);
+    m_shadowSampler = VK_NULL_HANDLE;
+    if (m_shadowDepthImageView) vkDestroyImageView(m_device, m_shadowDepthImageView, nullptr);
+    m_shadowDepthImageView = VK_NULL_HANDLE;
+    if (m_shadowDepthImage) vkDestroyImage(m_device, m_shadowDepthImage, nullptr);
+    m_shadowDepthImage = VK_NULL_HANDLE;
+    if (m_shadowDepthImageMemory) vkFreeMemory(m_device, m_shadowDepthImageMemory, nullptr);
+    m_shadowDepthImageMemory = VK_NULL_HANDLE;
+}
+
+void BistroExteriorShadowVulkan::RecreateShadowResources()
+{
+    vkDeviceWaitIdle(m_device);
+    DestroyShadowResources();
+    CreateShadowResources();
+    UpdateShadowDescriptorSets();
+}
+
+void BistroExteriorShadowVulkan::CreateFramebuffers()
 {
     m_framebuffers.resize(m_swapChainImageViews.size());
     for (size_t i = 0; i < m_swapChainImageViews.size(); ++i)
@@ -690,7 +933,7 @@ void BistroExteriorVulkan::CreateFramebuffers()
     }
 }
 
-void BistroExteriorVulkan::CreateCommandPool()
+void BistroExteriorShadowVulkan::CreateCommandPool()
 {
     QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice);
     VkCommandPoolCreateInfo poolInfo{};
@@ -700,7 +943,7 @@ void BistroExteriorVulkan::CreateCommandPool()
     ThrowIfFailed(vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool), "Failed to create command pool.");
 }
 
-void BistroExteriorVulkan::LoadModel()
+void BistroExteriorShadowVulkan::LoadModel()
 {
     m_scene = Bistro::LoadScene(Bistro::FindAssetRoot());
     XMFLOAT3 center(
@@ -714,7 +957,7 @@ void BistroExteriorVulkan::LoadModel()
     ResetCameraView();
 }
 
-void BistroExteriorVulkan::CreateVertexBuffer()
+void BistroExteriorShadowVulkan::CreateVertexBuffer()
 {
     VkDeviceSize bufferSize = sizeof(Bistro::Vertex) * m_scene.vertices.size();
     CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vertexBuffer, m_vertexBufferMemory);
@@ -724,7 +967,7 @@ void BistroExteriorVulkan::CreateVertexBuffer()
     vkUnmapMemory(m_device, m_vertexBufferMemory);
 }
 
-void BistroExteriorVulkan::CreateIndexBuffer()
+void BistroExteriorShadowVulkan::CreateIndexBuffer()
 {
     VkDeviceSize bufferSize = sizeof(uint32_t) * m_scene.indices.size();
     CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_indexBuffer, m_indexBufferMemory);
@@ -734,7 +977,7 @@ void BistroExteriorVulkan::CreateIndexBuffer()
     vkUnmapMemory(m_device, m_indexBufferMemory);
 }
 
-uint32_t BistroExteriorVulkan::CreateTextureResource(const std::wstring& path, bool srgb, const uint8_t fallback[4], std::map<std::wstring, uint32_t>& cache)
+uint32_t BistroExteriorShadowVulkan::CreateTextureResource(const std::wstring& path, bool srgb, const uint8_t fallback[4], std::map<std::wstring, uint32_t>& cache)
 {
     std::wstring key = path.empty() ? (std::wstring(L"fallback:") + std::to_wstring(fallback[0]) + L"," + std::to_wstring(fallback[1]) + L"," + std::to_wstring(fallback[2]) + L"," + std::to_wstring(fallback[3]) + (srgb ? L":srgb" : L":linear")) : path + (srgb ? L":srgb" : L":linear");
     auto found = cache.find(key);
@@ -776,7 +1019,7 @@ uint32_t BistroExteriorVulkan::CreateTextureResource(const std::wstring& path, b
     return index;
 }
 
-void BistroExteriorVulkan::CreateTextureImages()
+void BistroExteriorShadowVulkan::CreateTextureImages()
 {
     const uint8_t white[] = { 255, 255, 255, 255 };
     const uint8_t normal[] = { 128, 128, 255, 255 };
@@ -795,7 +1038,7 @@ void BistroExteriorVulkan::CreateTextureImages()
     }
 }
 
-void BistroExteriorVulkan::CreateTextureSampler()
+void BistroExteriorShadowVulkan::CreateTextureSampler()
 {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -812,7 +1055,7 @@ void BistroExteriorVulkan::CreateTextureSampler()
     ThrowIfFailed(vkCreateSampler(m_device, &samplerInfo, nullptr, &m_textureSampler), "Failed to create texture sampler.");
 }
 
-void BistroExteriorVulkan::CreateUniformBuffer()
+void BistroExteriorShadowVulkan::CreateUniformBuffer()
 {
     CreateBuffer(sizeof(SceneConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_sceneUniformBuffer, m_sceneUniformBufferMemory);
 
@@ -841,15 +1084,15 @@ void BistroExteriorVulkan::CreateUniformBuffer()
     UpdateUniformBuffer();
 }
 
-void BistroExteriorVulkan::CreateDescriptorPool()
+void BistroExteriorShadowVulkan::CreateDescriptorPool()
 {
     std::array<VkDescriptorPoolSize, 3> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * 2);
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * Bistro::TextureSlotCount);
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * (Bistro::TextureSlotCount + 1));
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
-    poolSizes[2].descriptorCount = static_cast<uint32_t>(m_scene.materials.size());
+    poolSizes[2].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * 2);
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -859,7 +1102,7 @@ void BistroExteriorVulkan::CreateDescriptorPool()
     ThrowIfFailed(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool), "Failed to create descriptor pool.");
 }
 
-void BistroExteriorVulkan::CreateDescriptorSets()
+void BistroExteriorShadowVulkan::CreateDescriptorSets()
 {
     m_descriptorSets.resize(m_scene.materials.size());
     std::vector<VkDescriptorSetLayout> layouts(m_scene.materials.size(), m_descriptorSetLayout);
@@ -892,7 +1135,14 @@ void BistroExteriorVulkan::CreateDescriptorSets()
         VkDescriptorImageInfo samplerInfo{};
         samplerInfo.sampler = m_textureSampler;
 
-        std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
+        VkDescriptorImageInfo shadowImageInfo{};
+        shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowImageInfo.imageView = m_shadowDepthImageView;
+
+        VkDescriptorImageInfo shadowSamplerInfo{};
+        shadowSamplerInfo.sampler = m_shadowSampler;
+
+        std::array<VkWriteDescriptorSet, 9> descriptorWrites{};
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = m_descriptorSets[materialIndex];
         descriptorWrites[0].dstBinding = 0;
@@ -923,11 +1173,55 @@ void BistroExteriorVulkan::CreateDescriptorSets()
         descriptorWrites[6].descriptorCount = 1;
         descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
         descriptorWrites[6].pImageInfo = &samplerInfo;
+
+        descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[7].dstSet = m_descriptorSets[materialIndex];
+        descriptorWrites[7].dstBinding = 7;
+        descriptorWrites[7].descriptorCount = 1;
+        descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        descriptorWrites[7].pImageInfo = &shadowImageInfo;
+
+        descriptorWrites[8].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[8].dstSet = m_descriptorSets[materialIndex];
+        descriptorWrites[8].dstBinding = 8;
+        descriptorWrites[8].descriptorCount = 1;
+        descriptorWrites[8].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        descriptorWrites[8].pImageInfo = &shadowSamplerInfo;
         vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 }
 
-void BistroExteriorVulkan::InitializeImGui()
+void BistroExteriorShadowVulkan::UpdateShadowDescriptorSets()
+{
+    for (VkDescriptorSet descriptorSet : m_descriptorSets)
+    {
+        VkDescriptorImageInfo shadowImageInfo{};
+        shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowImageInfo.imageView = m_shadowDepthImageView;
+
+        VkDescriptorImageInfo shadowSamplerInfo{};
+        shadowSamplerInfo.sampler = m_shadowSampler;
+
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSet;
+        descriptorWrites[0].dstBinding = 7;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        descriptorWrites[0].pImageInfo = &shadowImageInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSet;
+        descriptorWrites[1].dstBinding = 8;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        descriptorWrites[1].pImageInfo = &shadowSamplerInfo;
+
+        vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void BistroExteriorShadowVulkan::InitializeImGui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -954,7 +1248,7 @@ void BistroExteriorVulkan::InitializeImGui()
     ThrowIfFailed(ImGui_ImplVulkan_Init(&initInfo) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED, "Failed to initialize ImGui Vulkan backend.");
 }
 
-void BistroExteriorVulkan::ShutdownImGui()
+void BistroExteriorShadowVulkan::ShutdownImGui()
 {
     if (ImGui::GetCurrentContext())
     {
@@ -964,7 +1258,7 @@ void BistroExteriorVulkan::ShutdownImGui()
     }
 }
 
-void BistroExteriorVulkan::BuildUI()
+void BistroExteriorShadowVulkan::BuildUI()
 {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -1012,6 +1306,26 @@ void BistroExteriorVulkan::BuildUI()
         ResetCameraSpeeds();
     }
     ImGui::Separator();
+    ImGui::TextUnformatted("Shadow Map");
+    ImGui::Checkbox("Enable Shadows", &m_shadowsEnabled);
+    const char* shadowResolutions[] = { "1024", "2048", "4096" };
+    if (ImGui::Combo("Resolution", &m_shadowResolutionIndex, shadowResolutions, _countof(shadowResolutions)))
+    {
+        const uint32_t values[] = { 1024, 2048, 4096 };
+        m_shadowResolution = values[std::clamp(m_shadowResolutionIndex, 0, 2)];
+        m_shadowResourcesDirty = true;
+    }
+    ImGui::SliderFloat("Depth Bias", &m_shadowDepthBias, 0.0f, 0.02f, "%.4f");
+    ImGui::SliderFloat("Normal Bias", &m_shadowNormalBias, 0.0f, 0.5f, "%.3f");
+    ImGui::SliderInt("PCF Radius", &m_shadowPcfRadius, 0, 3);
+    ImGui::SliderFloat("Ortho Size", &m_shadowOrthoSize, 5.0f, 200.0f, "%.1f");
+    ImGui::SliderFloat("Focus Distance", &m_shadowFocusDistance, 1.0f, 120.0f, "%.1f");
+    ImGui::SliderFloat("Depth Range", &m_shadowDepthRange, 10.0f, 500.0f, "%.1f");
+    if (ImGui::Button("Reset Shadow"))
+    {
+        ResetShadowSettings();
+    }
+    ImGui::Separator();
     ImGui::TextUnformatted("Debug View");
     const char* debugModes[] =
     {
@@ -1031,7 +1345,10 @@ void BistroExteriorVulkan::BuildUI()
         "Normal Mip Level",
         "UV",
         "Alpha",
-        "Normal Texture Status"
+        "Normal Texture Status",
+        "Shadow Map Depth",
+        "Shadow Factor",
+        "Light Space Depth"
     };
     ImGui::Combo("Mode", &m_debugViewMode, debugModes, _countof(debugModes));
     ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip);
@@ -1051,7 +1368,7 @@ void BistroExteriorVulkan::BuildUI()
     ImGui::Render();
 }
 
-void BistroExteriorVulkan::BuildRendererStatsUI()
+void BistroExteriorShadowVulkan::BuildRendererStatsUI()
 {
     int normalTextureCount = 0;
     int normalFallbackCount = 0;
@@ -1104,10 +1421,19 @@ void BistroExteriorVulkan::BuildRendererStatsUI()
     ImGui::Text("Normal Maps: %d / %zu", normalTextureCount, m_scene.materials.size());
     ImGui::Text("Normal Fallbacks: %d", normalFallbackCount);
     ImGui::Text("Normal 1x1 SRVs: %d", normalOnePixelCount);
+    ImGui::Separator();
+    ImGui::TextUnformatted("Shadow");
+    ImGui::Text("Enabled: %s", m_shadowsEnabled ? "true" : "false");
+    ImGui::Text("Resolution: %u", m_shadowResolution);
+    ImGui::Text("Draw Calls: %zu", m_scene.draws.size());
+    ImGui::Text("Primitives: %llu", static_cast<unsigned long long>(primitiveCount));
+    ImGui::Text("Depth Bias: %.4f", m_shadowDepthBias);
+    ImGui::Text("Normal Bias: %.3f", m_shadowNormalBias);
+    ImGui::Text("PCF Radius: %d", m_shadowPcfRadius);
     ImGui::End();
 }
 
-void BistroExteriorVulkan::ResetLight()
+void BistroExteriorShadowVulkan::ResetLight()
 {
     m_lightDirection[0] = -0.35f;
     m_lightDirection[1] = -0.8f;
@@ -1118,18 +1444,35 @@ void BistroExteriorVulkan::ResetLight()
     m_lightIntensity = 4.0f;
 }
 
-void BistroExteriorVulkan::ResetCameraView()
+void BistroExteriorShadowVulkan::ResetCameraView()
 {
     m_camera.Reset(m_defaultCameraPosition, m_defaultCameraYaw, m_defaultCameraPitch);
 }
 
-void BistroExteriorVulkan::ResetCameraSpeeds()
+void BistroExteriorShadowVulkan::ResetCameraSpeeds()
 {
     m_baseMoveSpeed = 5.0f;
     m_fastMoveSpeed = 18.0f;
 }
 
-void BistroExteriorVulkan::CreateCommandBuffers()
+void BistroExteriorShadowVulkan::ResetShadowSettings()
+{
+    m_shadowsEnabled = true;
+    m_shadowResolutionIndex = 1;
+    if (m_shadowResolution != 2048)
+    {
+        m_shadowResolution = 2048;
+        m_shadowResourcesDirty = true;
+    }
+    m_shadowDepthBias = 0.002f;
+    m_shadowNormalBias = 0.05f;
+    m_shadowPcfRadius = 1;
+    m_shadowOrthoSize = 50.0f;
+    m_shadowFocusDistance = 25.0f;
+    m_shadowDepthRange = 160.0f;
+}
+
+void BistroExteriorShadowVulkan::CreateCommandBuffers()
 {
     m_commandBuffers.resize(m_framebuffers.size());
     VkCommandBufferAllocateInfo allocateInfo{};
@@ -1140,12 +1483,78 @@ void BistroExteriorVulkan::CreateCommandBuffers()
     ThrowIfFailed(vkAllocateCommandBuffers(m_device, &allocateInfo, m_commandBuffers.data()), "Failed to allocate command buffers.");
 }
 
-void BistroExteriorVulkan::RecordCommandBuffer(uint32_t imageIndex)
+void BistroExteriorShadowVulkan::RecordCommandBuffer(uint32_t imageIndex)
 {
     VkCommandBuffer commandBuffer = m_commandBuffers[imageIndex];
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     ThrowIfFailed(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin command buffer.");
+
+    VkClearValue shadowClear{};
+    shadowClear.depthStencil = { 1.0f, 0 };
+
+    VkRenderPassBeginInfo shadowPassInfo{};
+    shadowPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    shadowPassInfo.renderPass = m_shadowRenderPass;
+    shadowPassInfo.framebuffer = m_shadowFramebuffer;
+    shadowPassInfo.renderArea.extent = { m_shadowResolution, m_shadowResolution };
+    shadowPassInfo.clearValueCount = 1;
+    shadowPassInfo.pClearValues = &shadowClear;
+
+    vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+
+    VkViewport shadowViewport{};
+    shadowViewport.width = static_cast<float>(m_shadowResolution);
+    shadowViewport.height = static_cast<float>(m_shadowResolution);
+    shadowViewport.minDepth = 0.0f;
+    shadowViewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &shadowViewport);
+
+    VkRect2D shadowScissor{};
+    shadowScissor.extent = { m_shadowResolution, m_shadowResolution };
+    vkCmdSetScissor(commandBuffer, 0, 1, &shadowScissor);
+
+    VkBuffer vertexBuffers[] = { m_vertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+    for (const Bistro::DrawItem& draw : m_scene.draws)
+    {
+        const uint32_t materialIndex = (std::min)(draw.materialIndex, static_cast<uint32_t>(m_descriptorSets.size() - 1));
+        VkDescriptorSet descriptorSet = m_descriptorSets[materialIndex];
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+        vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.startIndex, draw.baseVertex, 0);
+    }
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    VkImageMemoryBarrier shadowBarrier{};
+    shadowBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    shadowBarrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    shadowBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    shadowBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    shadowBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    shadowBarrier.image = m_shadowDepthImage;
+    shadowBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    shadowBarrier.subresourceRange.baseMipLevel = 0;
+    shadowBarrier.subresourceRange.levelCount = 1;
+    shadowBarrier.subresourceRange.baseArrayLayer = 0;
+    shadowBarrier.subresourceRange.layerCount = 1;
+    shadowBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    shadowBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &shadowBarrier);
 
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = { { 0.0f, 0.2f, 0.4f, 1.0f } };
@@ -1161,8 +1570,6 @@ void BistroExteriorVulkan::RecordCommandBuffer(uint32_t imageIndex)
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
-    VkBuffer vertexBuffers[] = { m_vertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -1180,7 +1587,7 @@ void BistroExteriorVulkan::RecordCommandBuffer(uint32_t imageIndex)
     ThrowIfFailed(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer.");
 }
 
-void BistroExteriorVulkan::CreateSyncObjects()
+void BistroExteriorShadowVulkan::CreateSyncObjects()
 {
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1197,7 +1604,7 @@ void BistroExteriorVulkan::CreateSyncObjects()
     }
 }
 
-void BistroExteriorVulkan::UpdateUniformBuffer()
+void BistroExteriorShadowVulkan::UpdateUniformBuffer()
 {
     auto now = std::chrono::steady_clock::now();
     float delta = std::chrono::duration<float>(now - m_lastUpdate).count();
@@ -1229,6 +1636,23 @@ void BistroExteriorVulkan::UpdateUniformBuffer()
     constants.lightDirection = XMFLOAT4(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], 0.0f);
     constants.lightColor = XMFLOAT4(m_lightColor[0], m_lightColor[1], m_lightColor[2], m_lightIntensity);
     constants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, static_cast<float>(m_debugNormalForceMip), m_debugNormalMipBias);
+    constants.shadowOptions = XMFLOAT4(m_shadowsEnabled ? 1.0f : 0.0f, m_shadowDepthBias, m_shadowNormalBias, static_cast<float>(m_shadowPcfRadius));
+
+    const float yaw = m_camera.GetYawRadians();
+    const float pitch = m_camera.GetPitchRadians();
+    XMVECTOR cameraForward = XMVectorSet(std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch), 0.0f);
+    cameraForward = XMVector3Normalize(cameraForward);
+    XMVECTOR cameraPositionVector = XMLoadFloat3(&cameraPosition);
+    XMVECTOR focus = cameraPositionVector + cameraForward * m_shadowFocusDistance;
+    XMVECTOR lightEye = focus - lightDirection * (m_shadowDepthRange * 0.5f);
+    XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    if (std::abs(XMVectorGetX(XMVector3Dot(lightDirection, up))) > 0.95f)
+    {
+        up = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+    }
+    XMMATRIX lightView = XMMatrixLookAtLH(lightEye, focus, up);
+    XMMATRIX lightProjection = XMMatrixOrthographicLH(m_shadowOrthoSize, m_shadowOrthoSize, 0.0f, m_shadowDepthRange);
+    XMStoreFloat4x4(&constants.lightViewProjection, lightView * lightProjection);
 
     void* data = nullptr;
     vkMapMemory(m_device, m_sceneUniformBufferMemory, 0, sizeof(constants), 0, &data);
@@ -1236,7 +1660,7 @@ void BistroExteriorVulkan::UpdateUniformBuffer()
     vkUnmapMemory(m_device, m_sceneUniformBufferMemory);
 }
 
-bool BistroExteriorVulkan::IsDeviceSuitable(VkPhysicalDevice device) const
+bool BistroExteriorShadowVulkan::IsDeviceSuitable(VkPhysicalDevice device) const
 {
     QueueFamilyIndices indices = FindQueueFamilies(device);
     if (!indices.IsComplete())
@@ -1264,7 +1688,7 @@ bool BistroExteriorVulkan::IsDeviceSuitable(VkPhysicalDevice device) const
     return !support.formats.empty() && !support.presentModes.empty();
 }
 
-BistroExteriorVulkan::QueueFamilyIndices BistroExteriorVulkan::FindQueueFamilies(VkPhysicalDevice device) const
+BistroExteriorShadowVulkan::QueueFamilyIndices BistroExteriorShadowVulkan::FindQueueFamilies(VkPhysicalDevice device) const
 {
     QueueFamilyIndices indices;
     uint32_t queueFamilyCount = 0;
@@ -1295,7 +1719,7 @@ BistroExteriorVulkan::QueueFamilyIndices BistroExteriorVulkan::FindQueueFamilies
     return indices;
 }
 
-BistroExteriorVulkan::SwapChainSupport BistroExteriorVulkan::QuerySwapChainSupport(VkPhysicalDevice device) const
+BistroExteriorShadowVulkan::SwapChainSupport BistroExteriorShadowVulkan::QuerySwapChainSupport(VkPhysicalDevice device) const
 {
     SwapChainSupport support;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &support.capabilities);
@@ -1319,7 +1743,7 @@ BistroExteriorVulkan::SwapChainSupport BistroExteriorVulkan::QuerySwapChainSuppo
     return support;
 }
 
-VkSurfaceFormatKHR BistroExteriorVulkan::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const
+VkSurfaceFormatKHR BistroExteriorShadowVulkan::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const
 {
     for (const VkSurfaceFormatKHR& format : formats)
     {
@@ -1332,7 +1756,7 @@ VkSurfaceFormatKHR BistroExteriorVulkan::ChooseSwapSurfaceFormat(const std::vect
     return formats[0];
 }
 
-VkPresentModeKHR BistroExteriorVulkan::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes) const
+VkPresentModeKHR BistroExteriorShadowVulkan::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes) const
 {
     for (VkPresentModeKHR presentMode : presentModes)
     {
@@ -1345,7 +1769,7 @@ VkPresentModeKHR BistroExteriorVulkan::ChooseSwapPresentMode(const std::vector<V
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D BistroExteriorVulkan::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const
+VkExtent2D BistroExteriorShadowVulkan::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
     {
@@ -1358,7 +1782,7 @@ VkExtent2D BistroExteriorVulkan::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR
     return actualExtent;
 }
 
-uint32_t BistroExteriorVulkan::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
+uint32_t BistroExteriorShadowVulkan::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
 {
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memoryProperties);
@@ -1374,7 +1798,7 @@ uint32_t BistroExteriorVulkan::FindMemoryType(uint32_t typeFilter, VkMemoryPrope
     throw std::runtime_error("Failed to find suitable Vulkan memory type.");
 }
 
-void BistroExteriorVulkan::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory)
+void BistroExteriorShadowVulkan::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory)
 {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1394,7 +1818,7 @@ void BistroExteriorVulkan::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags us
     vkBindBufferMemory(m_device, buffer, memory, 0);
 }
 
-void BistroExteriorVulkan::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageUsageFlags usage, VkImage& image, VkDeviceMemory& memory)
+void BistroExteriorShadowVulkan::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageUsageFlags usage, VkImage& image, VkDeviceMemory& memory)
 {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1423,7 +1847,7 @@ void BistroExteriorVulkan::CreateImage(uint32_t width, uint32_t height, uint32_t
     vkBindImageMemory(m_device, image, memory, 0);
 }
 
-VkImageView BistroExteriorVulkan::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const
+VkImageView BistroExteriorShadowVulkan::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const
 {
     VkImageViewCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1441,7 +1865,7 @@ VkImageView BistroExteriorVulkan::CreateImageView(VkImage image, VkFormat format
     return imageView;
 }
 
-VkCommandBuffer BistroExteriorVulkan::BeginSingleTimeCommands() const
+VkCommandBuffer BistroExteriorShadowVulkan::BeginSingleTimeCommands() const
 {
     VkCommandBufferAllocateInfo allocateInfo{};
     allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1459,7 +1883,7 @@ VkCommandBuffer BistroExteriorVulkan::BeginSingleTimeCommands() const
     return commandBuffer;
 }
 
-void BistroExteriorVulkan::EndSingleTimeCommands(VkCommandBuffer commandBuffer) const
+void BistroExteriorShadowVulkan::EndSingleTimeCommands(VkCommandBuffer commandBuffer) const
 {
     ThrowIfFailed(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer.");
 
@@ -1472,7 +1896,7 @@ void BistroExteriorVulkan::EndSingleTimeCommands(VkCommandBuffer commandBuffer) 
     vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
 }
 
-void BistroExteriorVulkan::CopyBufferToImage(VkBuffer buffer, VkImage image, const Bistro::TextureData& texture) const
+void BistroExteriorShadowVulkan::CopyBufferToImage(VkBuffer buffer, VkImage image, const Bistro::TextureData& texture) const
 {
     VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
 
@@ -1493,7 +1917,7 @@ void BistroExteriorVulkan::CopyBufferToImage(VkBuffer buffer, VkImage image, con
     EndSingleTimeCommands(commandBuffer);
 }
 
-void BistroExteriorVulkan::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) const
+void BistroExteriorShadowVulkan::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) const
 {
     VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
 
@@ -1528,7 +1952,7 @@ void BistroExteriorVulkan::TransitionImageLayout(VkImage image, VkImageLayout ol
     EndSingleTimeCommands(commandBuffer);
 }
 
-std::vector<char> BistroExteriorVulkan::ReadFile(const std::wstring& path) const
+std::vector<char> BistroExteriorShadowVulkan::ReadFile(const std::wstring& path) const
 {
     std::ifstream file(path, std::ios::ate | std::ios::binary);
     if (!file.is_open())
@@ -1543,7 +1967,7 @@ std::vector<char> BistroExteriorVulkan::ReadFile(const std::wstring& path) const
     return buffer;
 }
 
-VkShaderModule BistroExteriorVulkan::CreateShaderModule(const std::vector<char>& code) const
+VkShaderModule BistroExteriorShadowVulkan::CreateShaderModule(const std::vector<char>& code) const
 {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1555,7 +1979,7 @@ VkShaderModule BistroExteriorVulkan::CreateShaderModule(const std::vector<char>&
     return shaderModule;
 }
 
-std::wstring BistroExteriorVulkan::GetExecutableDirectory() const
+std::wstring BistroExteriorShadowVulkan::GetExecutableDirectory() const
 {
     wchar_t path[MAX_PATH]{};
     DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
@@ -1573,7 +1997,7 @@ std::wstring BistroExteriorVulkan::GetExecutableDirectory() const
     return path;
 }
 
-void BistroExteriorVulkan::ThrowIfFailed(VkResult result, const char* message) const
+void BistroExteriorShadowVulkan::ThrowIfFailed(VkResult result, const char* message) const
 {
     if (result != VK_SUCCESS)
     {
