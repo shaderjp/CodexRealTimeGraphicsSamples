@@ -1,4 +1,4 @@
-# CodexdRealTimeGraphicsSamples
+# CodexRealTimeGraphicsSamples
 
 Direct3D12 and Vulkan real-time graphics samples for Windows and Visual Studio 2022.
 
@@ -106,5 +106,6 @@ Third-party dependencies are managed as Git submodules under `ThirdParty`.
 
 - `ThirdParty/imgui`
 - `ThirdParty/DirectXTex`
+- `ThirdParty/assimp`
 
 See `docs/third_party.md` for dependency notes.

@@ -1,4 +1,4 @@
-# CodexdRealTimeGraphicsSamples
+# CodexRealTimeGraphicsSamples
 
 Windows / Visual Studio 2022 向けの Direct3D12 と Vulkan のリアルタイムグラフィックスサンプル集です。
 
@@ -87,5 +87,6 @@ Third-party 依存は `ThirdParty` 配下の Git submodule として管理しま
 
 - `ThirdParty/imgui`
 - `ThirdParty/DirectXTex`
+- `ThirdParty/assimp`
 
 詳細は [docs/third_party.md](docs/third_party.md) を参照してください。
