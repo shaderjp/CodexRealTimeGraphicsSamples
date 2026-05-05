@@ -43,7 +43,7 @@
 Bistro データセットはこのリポジトリには含めません。NVIDIA ORCA から Amazon Lumberyard Bistro を取得し、展開した `Bistro_v5_2` フォルダをリポジトリ直下に置いてください。
 
 ```text
-CodexdRealTimeGraphicsSamples/
+CodexRealTimeGraphicsSamples/
   Bistro_v5_2/
     BistroExterior.fbx
     Textures/

@@ -43,7 +43,7 @@ The `Bistro Controls` ImGui window exposes a `Debug View` combo box. It can swit
 The Bistro dataset is not stored in this repository. Download Amazon Lumberyard Bistro from NVIDIA ORCA and place the extracted `Bistro_v5_2` folder at the repository root:
 
 ```text
-CodexdRealTimeGraphicsSamples/
+CodexRealTimeGraphicsSamples/
   Bistro_v5_2/
     BistroExterior.fbx
     Textures/
