@@ -49,6 +49,15 @@ void BistroExteriorD3D12::LoadPipeline()
 
     ComPtr<IDXGIFactory4> factory;
     ThrowIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
+    ComPtr<IDXGIFactory5> factory5;
+    if (SUCCEEDED(factory.As(&factory5)))
+    {
+        BOOL allowTearing = FALSE;
+        if (SUCCEEDED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing))))
+        {
+            m_tearingSupported = allowTearing == TRUE;
+        }
+    }
 
     if (m_useWarpDevice)
     {
@@ -76,6 +85,7 @@ void BistroExteriorD3D12::LoadPipeline()
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.SampleDesc.Count = 1;
+    swapChainDesc.Flags = m_tearingSupported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 
     ComPtr<IDXGISwapChain1> swapChain;
     ThrowIfFailed(factory->CreateSwapChainForHwnd(m_commandQueue.Get(), Win32Application::GetHwnd(), &swapChainDesc, nullptr, nullptr, &swapChain));
@@ -162,22 +172,30 @@ void BistroExteriorD3D12::LoadAssets()
 
 void BistroExteriorD3D12::CreateRootSignature()
 {
-    CD3DX12_DESCRIPTOR_RANGE srvRange;
-    srvRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, Bistro::TextureSlotCount, 0);
+    CD3DX12_DESCRIPTOR_RANGE srvRanges[Bistro::TextureSlotCount];
+    for (UINT slot = 0; slot < Bistro::TextureSlotCount; ++slot)
+    {
+        srvRanges[slot].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, slot);
+    }
 
-    CD3DX12_ROOT_PARAMETER rootParameters[3];
+    CD3DX12_ROOT_PARAMETER rootParameters[2 + Bistro::TextureSlotCount];
     rootParameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
     rootParameters[1].InitAsConstantBufferView(1, 0, D3D12_SHADER_VISIBILITY_PIXEL);
-    rootParameters[2].InitAsDescriptorTable(1, &srvRange, D3D12_SHADER_VISIBILITY_PIXEL);
+    for (UINT slot = 0; slot < Bistro::TextureSlotCount; ++slot)
+    {
+        rootParameters[2 + slot].InitAsDescriptorTable(1, &srvRanges[slot], D3D12_SHADER_VISIBILITY_PIXEL);
+    }
 
     D3D12_STATIC_SAMPLER_DESC sampler = {};
-    sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler.Filter = D3D12_FILTER_ANISOTROPIC;
     sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
     sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler.MaxAnisotropy = 8;
     sampler.ShaderRegister = 0;
     sampler.RegisterSpace = 0;
     sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    sampler.MinLOD = 0.0f;
     sampler.MaxLOD = D3D12_FLOAT32_MAX;
 
     CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
@@ -284,8 +302,13 @@ UINT BistroExteriorD3D12::CreateTextureResource(const std::wstring& path, bool s
         return found->second;
     }
 
-    Bistro::TextureData image = Bistro::LoadTextureRgba8(path, srgb, fallback);
+    Bistro::TextureData image = Bistro::LoadTextureD3D12(path, srgb, fallback);
     GpuTexture texture;
+    texture.path = path;
+    texture.width = image.width;
+    texture.height = image.height;
+    texture.mipLevels = image.mipLevels;
+    texture.fallback = image.fallback;
     D3D12_RESOURCE_DESC textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(image.format, image.width, image.height, 1, image.mipLevels);
     ThrowIfFailed(m_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&texture.resource)));
     const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.resource.Get(), 0, image.mipLevels);
@@ -316,6 +339,7 @@ void BistroExteriorD3D12::CreateTextures()
     const uint8_t black[] = { 0, 0, 0, 255 };
     std::map<std::wstring, UINT> textureCache;
 
+    m_materialTextureIndices.resize(m_scene.materials.size());
     for (UINT materialIndex = 0; materialIndex < m_scene.materials.size(); ++materialIndex)
     {
         const Bistro::Material& material = m_scene.materials[materialIndex];
@@ -324,14 +348,16 @@ void BistroExteriorD3D12::CreateTextures()
         indices[1] = CreateTextureResource(material.textures[Bistro::TextureSlotNormal], false, normal, textureCache);
         indices[2] = CreateTextureResource(material.textures[Bistro::TextureSlotSpecular], false, specular, textureCache);
         indices[3] = CreateTextureResource(material.textures[Bistro::TextureSlotEmissive], false, black, textureCache);
+        std::copy(std::begin(indices), std::end(indices), m_materialTextureIndices[materialIndex].begin());
 
         for (UINT slot = 0; slot < Bistro::TextureSlotCount; ++slot)
         {
+            const D3D12_RESOURCE_DESC textureDesc = m_textures[indices[slot]].resource->GetDesc();
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
             srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            srvDesc.Format = m_textures[indices[slot]].resource->GetDesc().Format;
+            srvDesc.Format = textureDesc.Format;
             srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels = m_textures[indices[slot]].resource->GetDesc().MipLevels;
+            srvDesc.Texture2D.MipLevels = textureDesc.MipLevels;
             CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), materialIndex * Bistro::TextureSlotCount + slot, m_srvDescriptorSize);
             m_device->CreateShaderResourceView(m_textures[indices[slot]].resource.Get(), &srvDesc, srvHandle);
         }
@@ -372,7 +398,7 @@ void BistroExteriorD3D12::UpdateConstantBuffer(float deltaSeconds)
     m_lightDirection[2] = normalizedLightDirection.z;
     m_sceneConstants.lightDirection = XMFLOAT4(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], 0.0f);
     m_sceneConstants.lightColor = XMFLOAT4(m_lightColor[0], m_lightColor[1], m_lightColor[2], m_lightIntensity);
-    m_sceneConstants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, 0.0f, 0.0f);
+    m_sceneConstants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, static_cast<float>(m_debugNormalForceMip), m_debugNormalMipBias);
     memcpy(m_mappedSceneConstants, &m_sceneConstants, sizeof(m_sceneConstants));
 }
 
@@ -381,7 +407,9 @@ void BistroExteriorD3D12::OnRender()
     PopulateCommandList();
     ID3D12CommandList* commandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
-    ThrowIfFailed(m_swapChain->Present(1, 0));
+    const UINT syncInterval = m_vsyncEnabled ? 1u : 0u;
+    const UINT presentFlags = !m_vsyncEnabled && m_tearingSupported ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+    ThrowIfFailed(m_swapChain->Present(syncInterval, presentFlags));
     WaitForPreviousFrame();
 }
 
@@ -412,8 +440,11 @@ void BistroExteriorD3D12::PopulateCommandList()
     {
         const UINT materialIndex = std::min<UINT>(draw.materialIndex, static_cast<UINT>(m_scene.materials.size() - 1));
         m_commandList->SetGraphicsRootConstantBufferView(1, m_materialConstantBuffer->GetGPUVirtualAddress() + materialIndex * m_materialConstantStride);
-        CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), materialIndex * Bistro::TextureSlotCount, m_srvDescriptorSize);
-        m_commandList->SetGraphicsRootDescriptorTable(2, srvHandle);
+        for (UINT slot = 0; slot < Bistro::TextureSlotCount; ++slot)
+        {
+            CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), materialIndex * Bistro::TextureSlotCount + slot, m_srvDescriptorSize);
+            m_commandList->SetGraphicsRootDescriptorTable(2 + slot, srvHandle);
+        }
         m_commandList->DrawIndexedInstanced(draw.indexCount, 1, draw.startIndex, draw.baseVertex, 0);
     }
 
@@ -554,14 +585,92 @@ void BistroExteriorD3D12::BuildUI()
         "Normal Texture Raw",
         "Normal Texture Decoded",
         "AO / Roughness / Metallic",
-        "NdotL"
+        "NdotL",
+        "Specular Texture Raw",
+        "Emissive Texture",
+        "Vertex Normal",
+        "Vertex Tangent",
+        "Vertex Bitangent",
+        "Tangent Handedness",
+        "Normal Mip Level",
+        "UV",
+        "Alpha",
+        "Normal Texture Status"
     };
     ImGui::Combo("Mode", &m_debugViewMode, debugModes, _countof(debugModes));
     ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip);
+    ImGui::SliderInt("Force Normal Mip", &m_debugNormalForceMip, -1, 10);
+    ImGui::SliderFloat("Normal Mip Bias", &m_debugNormalMipBias, -4.0f, 4.0f, "%.2f");
+    if (ImGui::Button("Reset Normal Sampling"))
+    {
+        m_debugNormalForceMip = 0;
+        m_debugNormalMipBias = 0.0f;
+    }
+    ImGui::Text("Force -1 uses sampler LOD");
     ImGui::PopItemWidth();
     ImGui::End();
 
+    BuildRendererStatsUI();
+
     ImGui::Render();
+}
+
+void BistroExteriorD3D12::BuildRendererStatsUI()
+{
+    int normalTextureCount = 0;
+    int normalFallbackCount = 0;
+    int normalOnePixelCount = 0;
+    for (const Bistro::Material& material : m_scene.materials)
+    {
+        const size_t materialIndex = &material - m_scene.materials.data();
+        if (!material.textures[Bistro::TextureSlotNormal].empty())
+        {
+            ++normalTextureCount;
+        }
+        if (materialIndex < m_materialTextureIndices.size())
+        {
+            const GpuTexture& normalTexture = m_textures[m_materialTextureIndices[materialIndex][Bistro::TextureSlotNormal]];
+            normalFallbackCount += normalTexture.fallback ? 1 : 0;
+            normalOnePixelCount += normalTexture.width <= 1 || normalTexture.height <= 1 ? 1 : 0;
+        }
+    }
+
+    uint64_t primitiveCount = 0;
+    uint64_t submittedIndexCount = 0;
+    for (const Bistro::DrawItem& draw : m_scene.draws)
+    {
+        submittedIndexCount += draw.indexCount;
+        primitiveCount += draw.indexCount / 3;
+    }
+
+    const ImGuiIO& io = ImGui::GetIO();
+    const float fps = io.Framerate;
+    const float frameTimeMs = fps > 0.0f ? 1000.0f / fps : 0.0f;
+
+    ImGui::SetNextWindowPos(ImVec2(430.0f, 48.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 300.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Renderer Stats");
+    ImGui::TextUnformatted("Frame");
+    ImGui::Text("API: Direct3D 12");
+    ImGui::Text("FPS: %.1f", fps);
+    ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
+    ImGui::Checkbox("VSync", &m_vsyncEnabled);
+    ImGui::Text("Tearing: %s", m_tearingSupported ? "Supported" : "Unsupported");
+    ImGui::Separator();
+    ImGui::TextUnformatted("Scene");
+    ImGui::Text("Materials: %zu", m_scene.materials.size());
+    ImGui::Text("Draw Calls: %zu", m_scene.draws.size());
+    ImGui::Text("Vertices: %zu", m_scene.vertices.size());
+    ImGui::Text("Indices: %zu", m_scene.indices.size());
+    ImGui::Text("Submitted Indices: %llu", static_cast<unsigned long long>(submittedIndexCount));
+    ImGui::Text("Primitives: %llu", static_cast<unsigned long long>(primitiveCount));
+    ImGui::Text("Textures: %zu", m_textures.size());
+    ImGui::Separator();
+    ImGui::TextUnformatted("Texture Diagnostics");
+    ImGui::Text("Normal Maps: %d / %zu", normalTextureCount, m_scene.materials.size());
+    ImGui::Text("Normal Fallbacks: %d", normalFallbackCount);
+    ImGui::Text("Normal 1x1 SRVs: %d", normalOnePixelCount);
+    ImGui::End();
 }
 
 void BistroExteriorD3D12::ResetLight()

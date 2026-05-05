@@ -4,6 +4,7 @@
 #include "..\..\Common\BistroCamera.h"
 #include "..\..\Common\BistroScene.h"
 
+#include <array>
 #include <chrono>
 #include <map>
 
@@ -44,6 +45,11 @@ private:
     {
         ComPtr<ID3D12Resource> resource;
         ComPtr<ID3D12Resource> upload;
+        std::wstring path;
+        uint32_t width = 1;
+        uint32_t height = 1;
+        uint32_t mipLevels = 1;
+        bool fallback = false;
     };
 
     CD3DX12_VIEWPORT m_viewport;
@@ -69,6 +75,7 @@ private:
     Bistro::Scene m_scene;
     std::vector<GpuTexture> m_textures;
     std::vector<UINT> m_materialTextureDescriptors;
+    std::vector<std::array<UINT, Bistro::TextureSlotCount>> m_materialTextureIndices;
     ComPtr<ID3D12Resource> m_vertexBuffer;
     ComPtr<ID3D12Resource> m_indexBuffer;
     ComPtr<ID3D12Resource> m_sceneConstantBuffer;
@@ -92,6 +99,10 @@ private:
     float m_fastMoveSpeed = 18.0f;
     int m_debugViewMode = 0;
     bool m_debugNormalMapYFlip = true;
+    int m_debugNormalForceMip = 0;
+    float m_debugNormalMipBias = 0.0f;
+    bool m_vsyncEnabled = false;
+    bool m_tearingSupported = false;
 
     UINT m_frameIndex = 0;
     HANDLE m_fenceEvent = nullptr;
@@ -110,6 +121,7 @@ private:
     void InitializeImGui();
     void ShutdownImGui();
     void BuildUI();
+    void BuildRendererStatsUI();
     void ResetLight();
     void ResetCameraView();
     void ResetCameraSpeeds();

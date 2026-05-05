@@ -50,7 +50,7 @@ git submodule update --init --recursive
 
 ## スクリーンショット
 
-各サンプル README に `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、NdotL の比較画像も掲載しています。
+各サンプル README に `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded の比較画像と、`Renderer Stats` オーバーレイも掲載しています。
 
 ## サンプル追加方針
 

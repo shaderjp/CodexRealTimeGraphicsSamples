@@ -16,6 +16,7 @@ namespace
         texture.height = 1;
         texture.mipLevels = 1;
         texture.format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+        texture.fallback = true;
         texture.mips.push_back({ 1, 1, 0, 4, 4 });
         texture.pixels.assign(fallback, fallback + 4);
         return texture;
@@ -58,6 +59,76 @@ namespace
         }
 
         return texture;
+    }
+
+    Bistro::TextureData MakeTextureFromImageMemory(const DirectX::Image* images, size_t imageCount, DXGI_FORMAT format)
+    {
+        if (images == nullptr || imageCount == 0 || images[0].width == 0 || images[0].height == 0 || images[0].pixels == nullptr)
+        {
+            throw std::runtime_error("Invalid texture image data.");
+        }
+
+        Bistro::TextureData texture;
+        texture.width = static_cast<uint32_t>(images[0].width);
+        texture.height = static_cast<uint32_t>(images[0].height);
+        texture.mipLevels = static_cast<uint32_t>(imageCount);
+        texture.format = format;
+        texture.mips.reserve(imageCount);
+
+        for (size_t mipIndex = 0; mipIndex < imageCount; ++mipIndex)
+        {
+            const DirectX::Image& image = images[mipIndex];
+            const size_t offset = texture.pixels.size();
+            texture.pixels.resize(offset + image.slicePitch);
+            memcpy(texture.pixels.data() + offset, image.pixels, image.slicePitch);
+            texture.mips.push_back({
+                static_cast<uint32_t>(image.width),
+                static_cast<uint32_t>(image.height),
+                offset,
+                image.rowPitch,
+                image.slicePitch
+            });
+        }
+
+        return texture;
+    }
+
+    DXGI_FORMAT ToSrgbFormat(DXGI_FORMAT format)
+    {
+        switch (format)
+        {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case DXGI_FORMAT_BC1_UNORM:
+            return DXGI_FORMAT_BC1_UNORM_SRGB;
+        case DXGI_FORMAT_BC2_UNORM:
+            return DXGI_FORMAT_BC2_UNORM_SRGB;
+        case DXGI_FORMAT_BC3_UNORM:
+            return DXGI_FORMAT_BC3_UNORM_SRGB;
+        case DXGI_FORMAT_BC7_UNORM:
+            return DXGI_FORMAT_BC7_UNORM_SRGB;
+        default:
+            return format;
+        }
+    }
+
+    DXGI_FORMAT ToLinearFormat(DXGI_FORMAT format)
+    {
+        switch (format)
+        {
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_BC1_UNORM_SRGB:
+            return DXGI_FORMAT_BC1_UNORM;
+        case DXGI_FORMAT_BC2_UNORM_SRGB:
+            return DXGI_FORMAT_BC2_UNORM;
+        case DXGI_FORMAT_BC3_UNORM_SRGB:
+            return DXGI_FORMAT_BC3_UNORM;
+        case DXGI_FORMAT_BC7_UNORM_SRGB:
+            return DXGI_FORMAT_BC7_UNORM;
+        default:
+            return format;
+        }
     }
 }
 
@@ -142,6 +213,38 @@ namespace Bistro
             }
 
             return MakeTextureFromImages(source, 1, outputFormat);
+        }
+        catch (const std::runtime_error&)
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+    }
+
+    TextureData LoadTextureD3D12(const std::wstring& path, bool srgb, const uint8_t fallback[4])
+    {
+        if (path.empty() || !std::filesystem::exists(path))
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+
+        std::filesystem::path fsPath(path);
+        if (_wcsicmp(fsPath.extension().c_str(), L".dds") != 0)
+        {
+            return LoadTextureRgba8(path, srgb, fallback);
+        }
+
+        DirectX::TexMetadata metadata{};
+        DirectX::ScratchImage image;
+        HRESULT hr = DirectX::LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, &metadata, image);
+        if (FAILED(hr) || image.GetImageCount() == 0)
+        {
+            return MakeFallbackTexture(srgb, fallback);
+        }
+
+        const DXGI_FORMAT outputFormat = srgb ? ToSrgbFormat(metadata.format) : ToLinearFormat(metadata.format);
+        try
+        {
+            return MakeTextureFromImageMemory(image.GetImages(), image.GetImageCount(), outputFormat);
         }
         catch (const std::runtime_error&)
         {

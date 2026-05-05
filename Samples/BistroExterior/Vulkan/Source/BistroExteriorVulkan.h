@@ -67,6 +67,10 @@ private:
         VkImageView view = VK_NULL_HANDLE;
         VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
         uint32_t mipLevels = 1;
+        std::wstring path;
+        uint32_t width = 1;
+        uint32_t height = 1;
+        bool fallback = false;
     };
 
     static constexpr uint32_t MaxFramesInFlight = 2;
@@ -104,6 +108,7 @@ private:
     void InitializeImGui();
     void ShutdownImGui();
     void BuildUI();
+    void BuildRendererStatsUI();
     void ResetLight();
     void ResetCameraView();
     void ResetCameraSpeeds();
@@ -188,6 +193,8 @@ private:
     float m_fastMoveSpeed = 18.0f;
     int m_debugViewMode = 0;
     bool m_debugNormalMapYFlip = true;
+    int m_debugNormalForceMip = 0;
+    float m_debugNormalMipBias = 0.0f;
     bool m_samplerAnisotropySupported = false;
     float m_maxSamplerAnisotropy = 1.0f;
 
