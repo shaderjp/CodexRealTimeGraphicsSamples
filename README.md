@@ -56,6 +56,16 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/BistroExterior/Vulkan/Source/BistroExteriorVulkan.vcxproj`
 - `Samples/BistroExterior/D3D12Shadow/Source/BistroExteriorShadowD3D12.vcxproj`
 - `Samples/BistroExterior/VulkanShadow/Source/BistroExteriorShadowVulkan.vcxproj`
+- `Samples/BistroExteriorMeshShader/BistroExteriorMeshShader.sln`
+- `Samples/BistroExteriorMeshShader/README.md`
+- `Samples/BistroExteriorMeshShader/D3D12/Source/BistroExteriorMeshShaderD3D12.vcxproj`
+- `Samples/BistroExteriorMeshShader/Vulkan/Source/BistroExteriorMeshShaderVulkan.vcxproj`
+- `Samples/BistroExteriorMeshShader/D3D12Culling/Source/BistroExteriorMeshShaderCullingD3D12.vcxproj`
+- `Samples/BistroExteriorMeshShader/VulkanCulling/Source/BistroExteriorMeshShaderCullingVulkan.vcxproj`
+- `Samples/BistroExteriorMeshShader/D3D12Shadow/Source/BistroExteriorMeshShaderShadowD3D12.vcxproj`
+- `Samples/BistroExteriorMeshShader/VulkanShadow/Source/BistroExteriorMeshShaderShadowVulkan.vcxproj`
+- `Samples/BistroExteriorMeshShader/D3D12ShadowCulling/Source/BistroExteriorMeshShaderShadowCullingD3D12.vcxproj`
+- `Samples/BistroExteriorMeshShader/VulkanShadowCulling/Source/BistroExteriorMeshShaderShadowCullingVulkan.vcxproj`
 - `Samples/Skinning/Skinning.sln`
 - `Samples/Skinning/README.md`
 - `Samples/Skinning/D3D12/Source/SkinningD3D12.vcxproj`
@@ -69,11 +79,13 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 `Samples/BistroExterior` loads Amazon Lumberyard Bistro Exterior from an external `Bistro_v5_2` folder through Assimp, reads DDS/TGA textures through DirectXTex, and adds an FPS-style camera for navigating the large scene. The same solution also includes D3D12/Vulkan shadow-map variants with ImGui controls for directional light shadows and debug views.
 
+`Samples/BistroExteriorMeshShader` renders the same Bistro Exterior scene through Mesh Shader pipelines. It includes D3D12/Vulkan direct-light, AS/TS meshlet-culling, shadow-map, and shadow-map+culling variants, runtime meshlet generation through meshoptimizer, ImGui `Meshlet Color` debug display, and renderer stats for meshlet dispatch and culling counts.
+
 `Samples/Skinning` loads the glTF 2.0 Cesium Man asset and renders animated vertex shader skinning or compute shader skinning with joint matrices. The compute variants write skinned vertices into a GPU buffer before the graphics pass.
 
 ## Screenshot Gallery
 
-Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images`. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay.
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images`. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views.
 
 ## Adding A Sample
 
@@ -109,5 +121,6 @@ Third-party dependencies are managed as Git submodules under `ThirdParty`.
 - `ThirdParty/imgui`
 - `ThirdParty/DirectXTex`
 - `ThirdParty/assimp`
+- `ThirdParty/meshoptimizer`
 
 See `docs/third_party.md` for dependency notes.

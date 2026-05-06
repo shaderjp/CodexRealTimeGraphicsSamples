@@ -205,7 +205,11 @@ void BistroExteriorVulkan::Render()
 
     uint32_t imageIndex = 0;
     VkResult acquireResult = vkAcquireNextImageKHR(m_device, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
-    if (acquireResult != VK_SUCCESS)
+    if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        return;
+    }
+    if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
     {
         ThrowIfFailed(acquireResult, "Failed to acquire swapchain image.");
     }
@@ -237,7 +241,11 @@ void BistroExteriorVulkan::Render()
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
-    ThrowIfFailed(vkQueuePresentKHR(m_presentQueue, &presentInfo), "Failed to present swapchain image.");
+    VkResult presentResult = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+    if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR && presentResult != VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        ThrowIfFailed(presentResult, "Failed to present swapchain image.");
+    }
     m_currentFrame = (m_currentFrame + 1) % MaxFramesInFlight;
 }
 

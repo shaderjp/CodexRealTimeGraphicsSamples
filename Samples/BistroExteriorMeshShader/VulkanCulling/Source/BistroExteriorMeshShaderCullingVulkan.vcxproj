@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>BistroExteriorMeshShaderCullingVulkan</RootNamespace>
+    <ProjectName>BistroExteriorMeshShaderCullingVulkan</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(CodexdOutputRoot)</OutDir>
+    <IntDir>$(CodexdIntermediateRoot)</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(CodexdOutputRoot)</OutDir>
+    <IntDir>$(CodexdIntermediateRoot)</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;VK_USE_PLATFORM_WIN32_KHR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;..\..\Common;$(AssimpRoot)\include;$(AssimpBuildRoot)\include;$(CodexdRepoRoot)ThirdParty\DirectXTex\DirectXTex;$(CodexdRepoRoot)ThirdParty\imgui;$(CodexdRepoRoot)ThirdParty\imgui\backends;$(CodexdRepoRoot)ThirdParty\meshoptimizer\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(AssimpBuildRoot)\lib\$(Configuration);$(AssimpBuildRoot)\contrib\zlib\$(Configuration);$(DirectXTexLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc143-mtd.lib;zlibstaticd.lib;DirectXTex.lib;vulkan-1.lib;d3d11.lib;dxgi.lib;dxguid.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;VK_USE_PLATFORM_WIN32_KHR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;..\..\Common;$(AssimpRoot)\include;$(AssimpBuildRoot)\include;$(CodexdRepoRoot)ThirdParty\DirectXTex\DirectXTex;$(CodexdRepoRoot)ThirdParty\imgui;$(CodexdRepoRoot)ThirdParty\imgui\backends;$(CodexdRepoRoot)ThirdParty\meshoptimizer\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(AssimpBuildRoot)\lib\$(Configuration);$(AssimpBuildRoot)\contrib\zlib\$(Configuration);$(DirectXTexLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc143-mt.lib;zlibstatic.lib;DirectXTex.lib;vulkan-1.lib;d3d11.lib;dxgi.lib;dxguid.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="BistroExteriorMeshShaderCullingVulkan.h" />
+    <ClInclude Include="..\..\Common\BistroCamera.h" />
+    <ClInclude Include="..\..\Common\BistroScene.h" />
+    <ClInclude Include="..\..\Common\BistroTexture.h" />
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imconfig.h" />
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.h" />
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_internal.h" />
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_vulkan.h" />
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BistroExteriorMeshShaderCullingVulkan.cpp" />
+    <ClCompile Include="..\..\Common\BistroCamera.cpp" />
+    <ClCompile Include="..\..\Common\BistroScene.cpp" />
+    <ClCompile Include="..\..\Common\BistroTexture.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\meshoptimizer\src\allocator.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\meshoptimizer\src\clusterizer.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\meshoptimizer\src\meshletutils.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_vulkan.cpp" />
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="Main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\BistroExteriorMeshShaderCulling.hlsl">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T as_6_6 -E ASMain -D VULKAN=1 -fspv-target-env=vulkan1.2 -fspv-extension=SPV_EXT_mesh_shader -fvk-use-dx-layout -fvk-use-dx-position-w -Zi -Fo "$(OutDir)BistroExteriorMeshShaderCulling.as.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ms_6_6 -E MSMain -D VULKAN=1 -fspv-target-env=vulkan1.2 -fspv-extension=SPV_EXT_mesh_shader -fvk-use-dx-layout -fvk-use-dx-position-w -Zi -Fo "$(OutDir)BistroExteriorMeshShaderCulling.ms.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ps_6_6 -E PSMain -D VULKAN=1 -fvk-use-dx-layout -fvk-use-dx-position-w -Zi -Fo "$(OutDir)BistroExteriorMeshShaderCulling.ps.spv" "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T as_6_6 -E ASMain -D VULKAN=1 -fspv-target-env=vulkan1.2 -fspv-extension=SPV_EXT_mesh_shader -fvk-use-dx-layout -fvk-use-dx-position-w -O3 -Fo "$(OutDir)BistroExteriorMeshShaderCulling.as.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ms_6_6 -E MSMain -D VULKAN=1 -fspv-target-env=vulkan1.2 -fspv-extension=SPV_EXT_mesh_shader -fvk-use-dx-layout -fvk-use-dx-position-w -O3 -Fo "$(OutDir)BistroExteriorMeshShaderCulling.ms.spv" "%(FullPath)"
+"$(VULKAN_SDK)\Bin\dxc.exe" -nologo -spirv -T ps_6_6 -E PSMain -D VULKAN=1 -fvk-use-dx-layout -fvk-use-dx-position-w -O3 -Fo "$(OutDir)BistroExteriorMeshShaderCulling.ps.spv" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)BistroExteriorMeshShaderCulling.as.spv;$(OutDir)BistroExteriorMeshShaderCulling.ms.spv;$(OutDir)BistroExteriorMeshShaderCulling.ps.spv</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)BistroExteriorMeshShaderCulling.as.spv;$(OutDir)BistroExteriorMeshShaderCulling.ms.spv;$(OutDir)BistroExteriorMeshShaderCulling.ps.spv</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling %(Identity) to Vulkan SPIR-V with DXC Shader Model 6.6</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling %(Identity) to Vulkan SPIR-V with DXC Shader Model 6.6</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EnsureVulkanSdk" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(VULKAN_SDK)' == ''" Text="VULKAN_SDK is not set. Install the Vulkan SDK and set VULKAN_SDK before building BistroExteriorMeshShaderCullingVulkan." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Include\vulkan\vulkan.h')" Text="Vulkan headers were not found under $(VULKAN_SDK)\Include. Check the VULKAN_SDK environment variable." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Lib\vulkan-1.lib')" Text="vulkan-1.lib was not found under $(VULKAN_SDK)\Lib. Check the Vulkan SDK installation." />
+    <Error Condition="'$(VULKAN_SDK)' != '' and !Exists('$(VULKAN_SDK)\Bin\dxc.exe')" Text="Vulkan SDK dxc.exe was not found under $(VULKAN_SDK)\Bin. Check the Vulkan SDK installation." />
+  </Target>
+</Project>
