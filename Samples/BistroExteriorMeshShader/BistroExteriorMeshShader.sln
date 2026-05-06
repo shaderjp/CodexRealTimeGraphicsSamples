@@ -1,0 +1,82 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BistroExteriorMeshShader", "BistroExteriorMeshShader", "{3190498A-57C2-4424-8F87-0B1F4EA7C5B1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderD3D12", "D3D12\Source\BistroExteriorMeshShaderD3D12.vcxproj", "{7B9F1507-69D1-4D56-AF9D-6B72661388D4}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderVulkan", "Vulkan\Source\BistroExteriorMeshShaderVulkan.vcxproj", "{E1F0C38C-99A7-4675-939D-1C23C19EE47A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderCullingD3D12", "D3D12Culling\Source\BistroExteriorMeshShaderCullingD3D12.vcxproj", "{0D2B5C6C-BFB7-49AF-BB67-08A561A77956}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderCullingVulkan", "VulkanCulling\Source\BistroExteriorMeshShaderCullingVulkan.vcxproj", "{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderShadowD3D12", "D3D12Shadow\Source\BistroExteriorMeshShaderShadowD3D12.vcxproj", "{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderShadowVulkan", "VulkanShadow\Source\BistroExteriorMeshShaderShadowVulkan.vcxproj", "{DA98B25C-1A3F-4DFB-81A7-B6824898F741}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderShadowCullingD3D12", "D3D12ShadowCulling\Source\BistroExteriorMeshShaderShadowCullingD3D12.vcxproj", "{740610B8-6481-444C-BAF1-EFCDB9A4D92B}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorMeshShaderShadowCullingVulkan", "VulkanShadowCulling\Source\BistroExteriorMeshShaderShadowCullingVulkan.vcxproj", "{E78E0E35-3A46-4E59-8FE7-C3DBC3705456}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectDependencies) = postSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.{E1F0C38C-99A7-4675-939D-1C23C19EE47A} = {E1F0C38C-99A7-4675-939D-1C23C19EE47A}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Debug|x64.ActiveCfg = Debug|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Debug|x64.Build.0 = Debug|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Release|x64.ActiveCfg = Release|x64
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4}.Release|x64.Build.0 = Release|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Debug|x64.ActiveCfg = Debug|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Debug|x64.Build.0 = Debug|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.ActiveCfg = Release|x64
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A}.Release|x64.Build.0 = Release|x64
+		{0D2B5C6C-BFB7-49AF-BB67-08A561A77956}.Debug|x64.ActiveCfg = Debug|x64
+		{0D2B5C6C-BFB7-49AF-BB67-08A561A77956}.Debug|x64.Build.0 = Debug|x64
+		{0D2B5C6C-BFB7-49AF-BB67-08A561A77956}.Release|x64.ActiveCfg = Release|x64
+		{0D2B5C6C-BFB7-49AF-BB67-08A561A77956}.Release|x64.Build.0 = Release|x64
+		{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}.Debug|x64.ActiveCfg = Debug|x64
+		{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}.Debug|x64.Build.0 = Debug|x64
+		{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}.Release|x64.ActiveCfg = Release|x64
+		{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12}.Release|x64.Build.0 = Release|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Debug|x64.ActiveCfg = Debug|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Debug|x64.Build.0 = Debug|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Release|x64.ActiveCfg = Release|x64
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74}.Release|x64.Build.0 = Release|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Debug|x64.ActiveCfg = Debug|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Debug|x64.Build.0 = Debug|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Release|x64.ActiveCfg = Release|x64
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741}.Release|x64.Build.0 = Release|x64
+		{740610B8-6481-444C-BAF1-EFCDB9A4D92B}.Debug|x64.ActiveCfg = Debug|x64
+		{740610B8-6481-444C-BAF1-EFCDB9A4D92B}.Debug|x64.Build.0 = Debug|x64
+		{740610B8-6481-444C-BAF1-EFCDB9A4D92B}.Release|x64.ActiveCfg = Release|x64
+		{740610B8-6481-444C-BAF1-EFCDB9A4D92B}.Release|x64.Build.0 = Release|x64
+		{E78E0E35-3A46-4E59-8FE7-C3DBC3705456}.Debug|x64.ActiveCfg = Debug|x64
+		{E78E0E35-3A46-4E59-8FE7-C3DBC3705456}.Debug|x64.Build.0 = Debug|x64
+		{E78E0E35-3A46-4E59-8FE7-C3DBC3705456}.Release|x64.ActiveCfg = Release|x64
+		{E78E0E35-3A46-4E59-8FE7-C3DBC3705456}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7B9F1507-69D1-4D56-AF9D-6B72661388D4} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{E1F0C38C-99A7-4675-939D-1C23C19EE47A} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{0D2B5C6C-BFB7-49AF-BB67-08A561A77956} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{3BDC0B84-4009-4BA4-BBAA-8EE48DDD3E12} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{B9CF1A0D-4163-4ED3-9B08-15B0D2F0AE74} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{DA98B25C-1A3F-4DFB-81A7-B6824898F741} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{740610B8-6481-444C-BAF1-EFCDB9A4D92B} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+		{E78E0E35-3A46-4E59-8FE7-C3DBC3705456} = {3190498A-57C2-4424-8F87-0B1F4EA7C5B1}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {09765320-9622-445C-A2C9-77945095ED36}
+	EndGlobalSection
+EndGlobal

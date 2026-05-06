@@ -1,0 +1,1734 @@
+#include "BistroExteriorMeshShaderCullingVulkan.h"
+#include "..\..\Common\BistroTexture.h"
+
+#include "imgui.h"
+#include "backends/imgui_impl_vulkan.h"
+#include "backends/imgui_impl_win32.h"
+
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <set>
+#include <stdexcept>
+
+using namespace DirectX;
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+namespace
+{
+    const std::vector<const char*> DeviceExtensions =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
+    };
+
+    constexpr uint32_t MaxMeshDispatchWorkGroupsX = 65535;
+    constexpr uint32_t TaskThreadCount = 128;
+    constexpr uint32_t MaxMeshletsPerDispatch = MaxMeshDispatchWorkGroupsX * TaskThreadCount;
+
+    XMFLOAT4 NormalizePlane(float x, float y, float z, float w)
+    {
+        const float length = std::sqrt(x * x + y * y + z * z);
+        if (length <= 0.000001f)
+        {
+            return XMFLOAT4(x, y, z, w);
+        }
+        const float invLength = 1.0f / length;
+        return XMFLOAT4(x * invLength, y * invLength, z * invLength, w * invLength);
+    }
+
+    bool IsMeshletVisible(const Bistro::MeshletBounds& bounds, const XMFLOAT4 frustumPlanes[6], const XMFLOAT3& cameraPosition)
+    {
+        for (uint32_t planeIndex = 0; planeIndex < 6; ++planeIndex)
+        {
+            const XMFLOAT4& plane = frustumPlanes[planeIndex];
+            const float distance =
+                plane.x * bounds.sphere.x +
+                plane.y * bounds.sphere.y +
+                plane.z * bounds.sphere.z +
+                plane.w;
+            if (distance < -bounds.sphere.w)
+            {
+                return false;
+            }
+        }
+
+        const XMFLOAT3 centerToCamera(
+            bounds.sphere.x - cameraPosition.x,
+            bounds.sphere.y - cameraPosition.y,
+            bounds.sphere.z - cameraPosition.z);
+        const float length = std::sqrt(centerToCamera.x * centerToCamera.x + centerToCamera.y * centerToCamera.y + centerToCamera.z * centerToCamera.z);
+        const float coneDistance =
+            centerToCamera.x * bounds.coneAxis.x +
+            centerToCamera.y * bounds.coneAxis.y +
+            centerToCamera.z * bounds.coneAxis.z;
+        return coneDistance < bounds.coneAxis.w * length + bounds.sphere.w;
+    }
+
+    VkFormat ToVkFormat(DXGI_FORMAT format)
+    {
+        switch (format)
+        {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            return VK_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            return VK_FORMAT_R8G8B8A8_SRGB;
+        case DXGI_FORMAT_BC1_UNORM:
+            return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        case DXGI_FORMAT_BC1_UNORM_SRGB:
+            return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+        case DXGI_FORMAT_BC2_UNORM:
+            return VK_FORMAT_BC2_UNORM_BLOCK;
+        case DXGI_FORMAT_BC2_UNORM_SRGB:
+            return VK_FORMAT_BC2_SRGB_BLOCK;
+        case DXGI_FORMAT_BC3_UNORM:
+            return VK_FORMAT_BC3_UNORM_BLOCK;
+        case DXGI_FORMAT_BC3_UNORM_SRGB:
+            return VK_FORMAT_BC3_SRGB_BLOCK;
+        case DXGI_FORMAT_BC4_UNORM:
+            return VK_FORMAT_BC4_UNORM_BLOCK;
+        case DXGI_FORMAT_BC4_SNORM:
+            return VK_FORMAT_BC4_SNORM_BLOCK;
+        case DXGI_FORMAT_BC5_UNORM:
+            return VK_FORMAT_BC5_UNORM_BLOCK;
+        case DXGI_FORMAT_BC5_SNORM:
+            return VK_FORMAT_BC5_SNORM_BLOCK;
+        case DXGI_FORMAT_BC6H_UF16:
+            return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+        case DXGI_FORMAT_BC6H_SF16:
+            return VK_FORMAT_BC6H_SFLOAT_BLOCK;
+        case DXGI_FORMAT_BC7_UNORM:
+            return VK_FORMAT_BC7_UNORM_BLOCK;
+        case DXGI_FORMAT_BC7_UNORM_SRGB:
+            return VK_FORMAT_BC7_SRGB_BLOCK;
+        default:
+            throw std::runtime_error("Unsupported Vulkan texture format.");
+        }
+    }
+}
+
+bool BistroExteriorMeshShaderCullingVulkan::QueueFamilyIndices::IsComplete() const
+{
+    return graphicsFamily != UINT32_MAX && presentFamily != UINT32_MAX;
+}
+
+BistroExteriorMeshShaderCullingVulkan::BistroExteriorMeshShaderCullingVulkan(uint32_t width, uint32_t height, const wchar_t* title) :
+    m_width(width),
+    m_height(height),
+    m_title(title)
+{
+}
+
+BistroExteriorMeshShaderCullingVulkan::~BistroExteriorMeshShaderCullingVulkan()
+{
+    Cleanup();
+}
+
+int BistroExteriorMeshShaderCullingVulkan::Run(HINSTANCE instance, int showCommand)
+{
+    HRESULT coResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(coResult))
+    {
+        throw std::runtime_error("Failed to initialize COM for WIC texture loading.");
+    }
+    InitWindow(instance, showCommand);
+    InitVulkan();
+    MainLoop();
+    WaitIdle();
+    CoUninitialize();
+    return 0;
+}
+
+LRESULT CALLBACK BistroExteriorMeshShaderCullingVulkan::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, message, wParam, lParam))
+    {
+        return true;
+    }
+
+    BistroExteriorMeshShaderCullingVulkan* app = reinterpret_cast<BistroExteriorMeshShaderCullingVulkan*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    if (message == WM_NCCREATE)
+    {
+        auto* createStruct = reinterpret_cast<CREATESTRUCT*>(lParam);
+        app = reinterpret_cast<BistroExteriorMeshShaderCullingVulkan*>(createStruct->lpCreateParams);
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
+    }
+
+    if (app)
+    {
+        if (message == WM_SETFOCUS) app->m_camera.SetActive(true);
+        if (message == WM_KILLFOCUS) app->m_camera.SetActive(false);
+        if (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP) app->m_camera.OnMouseButton(message, wParam);
+        if (message == WM_MOUSEMOVE) app->m_camera.OnMouseMove(lParam);
+    }
+
+    if (message == WM_DESTROY)
+    {
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::InitWindow(HINSTANCE instance, int showCommand)
+{
+    m_instanceHandle = instance;
+
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(WNDCLASSEXW);
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.lpfnWndProc = WindowProc;
+    windowClass.hInstance = instance;
+    windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    windowClass.lpszClassName = L"BistroExteriorMeshShaderCullingVulkanWindowClass";
+    RegisterClassExW(&windowClass);
+
+    RECT rect = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };
+    AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
+
+    m_hwnd = CreateWindowExW(0, windowClass.lpszClassName, m_title.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, instance, this);
+    if (!m_hwnd)
+    {
+        throw std::runtime_error("Failed to create Win32 window.");
+    }
+
+    ShowWindow(m_hwnd, showCommand);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::InitVulkan()
+{
+    LoadModel();
+    CreateInstance();
+    CreateSurface();
+    PickPhysicalDevice();
+    CreateLogicalDevice();
+    CreateSwapChain();
+    CreateImageViews();
+    CreateRenderPass();
+    CreateDescriptorSetLayout();
+    CreateGraphicsPipeline();
+    CreateDepthResources();
+    CreateFramebuffers();
+    CreateCommandPool();
+    CreateVertexBuffer();
+    CreateMeshletBuffers();
+    CreateTextureImages();
+    CreateTextureSampler();
+    CreateUniformBuffer();
+    CreateDescriptorPool();
+    CreateDescriptorSets();
+    InitializeImGui();
+    CreateCommandBuffers();
+    CreateSyncObjects();
+    m_lastUpdate = std::chrono::steady_clock::now();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::MainLoop()
+{
+    MSG message{};
+    while (message.message != WM_QUIT)
+    {
+        if (PeekMessage(&message, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&message);
+            DispatchMessage(&message);
+        }
+        else
+        {
+            Render();
+        }
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::Render()
+{
+    vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+    BuildUI();
+    UpdateUniformBuffer();
+
+    uint32_t imageIndex = 0;
+    VkResult acquireResult = vkAcquireNextImageKHR(m_device, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        return;
+    }
+    if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
+    {
+        ThrowIfFailed(acquireResult, "Failed to acquire swapchain image.");
+    }
+
+    vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
+    vkResetCommandBuffer(m_commandBuffers[imageIndex], 0);
+    RecordCommandBuffer(imageIndex);
+
+    VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphores[m_currentFrame] };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphores[m_currentFrame] };
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &m_commandBuffers[imageIndex];
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+    ThrowIfFailed(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]), "Failed to submit draw command buffer.");
+
+    VkSwapchainKHR swapChains[] = { m_swapChain };
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    VkResult presentResult = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+    if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR && presentResult != VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        ThrowIfFailed(presentResult, "Failed to present swapchain image.");
+    }
+    m_currentFrame = (m_currentFrame + 1) % MaxFramesInFlight;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::WaitIdle()
+{
+    if (m_device != VK_NULL_HANDLE)
+    {
+        vkDeviceWaitIdle(m_device);
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::Cleanup()
+{
+    if (m_device != VK_NULL_HANDLE)
+    {
+        vkDeviceWaitIdle(m_device);
+        ShutdownImGui();
+
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i)
+        {
+            if (m_inFlightFences[i]) vkDestroyFence(m_device, m_inFlightFences[i], nullptr);
+            if (m_renderFinishedSemaphores[i]) vkDestroySemaphore(m_device, m_renderFinishedSemaphores[i], nullptr);
+            if (m_imageAvailableSemaphores[i]) vkDestroySemaphore(m_device, m_imageAvailableSemaphores[i], nullptr);
+        }
+
+        if (m_descriptorPool) vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+        if (m_sceneUniformBuffer) vkDestroyBuffer(m_device, m_sceneUniformBuffer, nullptr);
+        if (m_sceneUniformBufferMemory) vkFreeMemory(m_device, m_sceneUniformBufferMemory, nullptr);
+        if (m_materialUniformBuffer) vkDestroyBuffer(m_device, m_materialUniformBuffer, nullptr);
+        if (m_materialUniformBufferMemory) vkFreeMemory(m_device, m_materialUniformBufferMemory, nullptr);
+        if (m_textureSampler) vkDestroySampler(m_device, m_textureSampler, nullptr);
+        for (GpuTexture& texture : m_textures)
+        {
+            if (texture.view) vkDestroyImageView(m_device, texture.view, nullptr);
+            if (texture.image) vkDestroyImage(m_device, texture.image, nullptr);
+            if (texture.memory) vkFreeMemory(m_device, texture.memory, nullptr);
+        }
+        if (m_meshletTriangleBuffer) vkDestroyBuffer(m_device, m_meshletTriangleBuffer, nullptr);
+        if (m_meshletTriangleBufferMemory) vkFreeMemory(m_device, m_meshletTriangleBufferMemory, nullptr);
+        if (m_meshletBoundsBuffer) vkDestroyBuffer(m_device, m_meshletBoundsBuffer, nullptr);
+        if (m_meshletBoundsBufferMemory) vkFreeMemory(m_device, m_meshletBoundsBufferMemory, nullptr);
+        if (m_meshletVertexBuffer) vkDestroyBuffer(m_device, m_meshletVertexBuffer, nullptr);
+        if (m_meshletVertexBufferMemory) vkFreeMemory(m_device, m_meshletVertexBufferMemory, nullptr);
+        if (m_meshletBuffer) vkDestroyBuffer(m_device, m_meshletBuffer, nullptr);
+        if (m_meshletBufferMemory) vkFreeMemory(m_device, m_meshletBufferMemory, nullptr);
+        if (m_vertexBuffer) vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
+        if (m_vertexBufferMemory) vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
+        if (m_commandPool) vkDestroyCommandPool(m_device, m_commandPool, nullptr);
+
+        for (VkFramebuffer framebuffer : m_framebuffers)
+        {
+            vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+        }
+        if (m_depthImageView) vkDestroyImageView(m_device, m_depthImageView, nullptr);
+        if (m_depthImage) vkDestroyImage(m_device, m_depthImage, nullptr);
+        if (m_depthImageMemory) vkFreeMemory(m_device, m_depthImageMemory, nullptr);
+        if (m_graphicsPipeline) vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
+        if (m_pipelineLayout) vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+        if (m_descriptorSetLayout) vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+        if (m_renderPass) vkDestroyRenderPass(m_device, m_renderPass, nullptr);
+
+        for (VkImageView imageView : m_swapChainImageViews)
+        {
+            vkDestroyImageView(m_device, imageView, nullptr);
+        }
+        if (m_swapChain) vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+        vkDestroyDevice(m_device, nullptr);
+        m_device = VK_NULL_HANDLE;
+    }
+
+    if (m_surface) vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+    if (m_instance) vkDestroyInstance(m_instance, nullptr);
+    if (m_hwnd) DestroyWindow(m_hwnd);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateInstance()
+{
+    VkApplicationInfo appInfo{};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "BistroExteriorMeshShaderCulling Vulkan";
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.pEngineName = "CodexdRealTimeGraphicsSamples";
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_2;
+
+    const char* extensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME };
+    VkInstanceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pApplicationInfo = &appInfo;
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(std::size(extensions));
+    createInfo.ppEnabledExtensionNames = extensions;
+    ThrowIfFailed(vkCreateInstance(&createInfo, nullptr, &m_instance), "Failed to create Vulkan instance.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateSurface()
+{
+    VkWin32SurfaceCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    createInfo.hinstance = m_instanceHandle;
+    createInfo.hwnd = m_hwnd;
+    ThrowIfFailed(vkCreateWin32SurfaceKHR(m_instance, &createInfo, nullptr, &m_surface), "Failed to create Win32 surface.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::PickPhysicalDevice()
+{
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
+    if (deviceCount == 0)
+    {
+        throw std::runtime_error("No Vulkan-capable GPU was found.");
+    }
+
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
+    for (VkPhysicalDevice device : devices)
+    {
+        if (IsDeviceSuitable(device))
+        {
+            m_physicalDevice = device;
+            return;
+        }
+    }
+
+    throw std::runtime_error("No suitable Vulkan device was found. BistroExteriorMeshShaderCullingVulkan requires Vulkan 1.2, swapchain support, VK_EXT_mesh_shader, and meshShader feature support.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateLogicalDevice()
+{
+    QueueFamilyIndices indices = FindQueueFamilies(m_physicalDevice);
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
+    float queuePriority = 1.0f;
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+
+    for (uint32_t queueFamily : uniqueQueueFamilies)
+    {
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT supportedMeshShaderFeatures{};
+    supportedMeshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    VkPhysicalDeviceFeatures2 supportedFeatures{};
+    supportedFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    supportedFeatures.pNext = &supportedMeshShaderFeatures;
+    vkGetPhysicalDeviceFeatures2(m_physicalDevice, &supportedFeatures);
+    VkPhysicalDeviceProperties deviceProperties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &deviceProperties);
+    m_samplerAnisotropySupported = supportedFeatures.features.samplerAnisotropy == VK_TRUE;
+    m_textureCompressionBcSupported = supportedFeatures.features.textureCompressionBC == VK_TRUE;
+    m_maxSamplerAnisotropy = m_samplerAnisotropySupported ? deviceProperties.limits.maxSamplerAnisotropy : 1.0f;
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
+    meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshShaderFeatures.meshShader = VK_TRUE;
+    meshShaderFeatures.taskShader = VK_TRUE;
+
+    VkPhysicalDeviceFeatures2 deviceFeatures{};
+    deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    deviceFeatures.pNext = &meshShaderFeatures;
+    deviceFeatures.features.samplerAnisotropy = supportedFeatures.features.samplerAnisotropy;
+    deviceFeatures.features.textureCompressionBC = m_textureCompressionBcSupported ? VK_TRUE : VK_FALSE;
+
+    VkDeviceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pNext = &deviceFeatures;
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(DeviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = DeviceExtensions.data();
+    ThrowIfFailed(vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device), "Failed to create Vulkan device.");
+    vkGetDeviceQueue(m_device, indices.graphicsFamily, 0, &m_graphicsQueue);
+    vkGetDeviceQueue(m_device, indices.presentFamily, 0, &m_presentQueue);
+    m_vkCmdDrawMeshTasksEXT = reinterpret_cast<PFN_vkCmdDrawMeshTasksEXT>(vkGetDeviceProcAddr(m_device, "vkCmdDrawMeshTasksEXT"));
+    if (!m_vkCmdDrawMeshTasksEXT)
+    {
+        throw std::runtime_error("VK_EXT_mesh_shader was enabled, but vkCmdDrawMeshTasksEXT could not be loaded.");
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateSwapChain()
+{
+    SwapChainSupport support = QuerySwapChainSupport(m_physicalDevice);
+    VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(support.formats);
+    VkPresentModeKHR presentMode = ChooseSwapPresentMode(support.presentModes);
+    VkExtent2D extent = ChooseSwapExtent(support.capabilities);
+
+    uint32_t imageCount = support.capabilities.minImageCount + 1;
+    if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount)
+    {
+        imageCount = support.capabilities.maxImageCount;
+    }
+
+    QueueFamilyIndices indices = FindQueueFamilies(m_physicalDevice);
+    uint32_t queueFamilyIndices[] = { indices.graphicsFamily, indices.presentFamily };
+
+    VkSwapchainCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = m_surface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    if (indices.graphicsFamily != indices.presentFamily)
+    {
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else
+    {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    }
+
+    createInfo.preTransform = support.capabilities.currentTransform;
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+    ThrowIfFailed(vkCreateSwapchainKHR(m_device, &createInfo, nullptr, &m_swapChain), "Failed to create swapchain.");
+
+    vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, nullptr);
+    m_swapChainImages.resize(imageCount);
+    vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, m_swapChainImages.data());
+    m_swapChainImageFormat = surfaceFormat.format;
+    m_swapChainExtent = extent;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateImageViews()
+{
+    m_swapChainImageViews.resize(m_swapChainImages.size());
+    for (size_t i = 0; i < m_swapChainImages.size(); ++i)
+    {
+        m_swapChainImageViews[i] = CreateImageView(m_swapChainImages[i], m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateRenderPass()
+{
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = m_swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = DepthFormat;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.attachment = 1;
+    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments = attachments.data();
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
+    ThrowIfFailed(vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_renderPass), "Failed to create render pass.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateDescriptorSetLayout()
+{
+    std::array<VkDescriptorSetLayoutBinding, 12> bindings{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    for (uint32_t i = 0; i < Bistro::TextureSlotCount; ++i)
+    {
+        bindings[2 + i].binding = 2 + i;
+        bindings[2 + i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        bindings[2 + i].descriptorCount = 1;
+        bindings[2 + i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+
+    bindings[6].binding = 6;
+    bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[6].descriptorCount = 1;
+    bindings[6].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        bindings[7 + i].binding = 7 + i;
+        bindings[7 + i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindings[7 + i].descriptorCount = 1;
+        bindings[7 + i].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
+    }
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+    ThrowIfFailed(vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_descriptorSetLayout), "Failed to create descriptor set layout.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateGraphicsPipeline()
+{
+    std::wstring shaderDirectory = GetExecutableDirectory();
+    VkShaderModule meshShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorMeshShaderCulling.ms.spv"));
+    VkShaderModule taskShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorMeshShaderCulling.as.spv"));
+    VkShaderModule pixelShaderModule = CreateShaderModule(ReadFile(shaderDirectory + L"BistroExteriorMeshShaderCulling.ps.spv"));
+
+    VkPipelineShaderStageCreateInfo taskShaderStageInfo{};
+    taskShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    taskShaderStageInfo.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+    taskShaderStageInfo.module = taskShaderModule;
+    taskShaderStageInfo.pName = "ASMain";
+
+    VkPipelineShaderStageCreateInfo meshShaderStageInfo{};
+    meshShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    meshShaderStageInfo.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    meshShaderStageInfo.module = meshShaderModule;
+    meshShaderStageInfo.pName = "MSMain";
+
+    VkPipelineShaderStageCreateInfo pixelShaderStageInfo{};
+    pixelShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pixelShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pixelShaderStageInfo.module = pixelShaderModule;
+    pixelShaderStageInfo.pName = "PSMain";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { taskShaderStageInfo, meshShaderStageInfo, pixelShaderStageInfo };
+
+    VkViewport viewport{};
+    viewport.width = static_cast<float>(m_swapChainExtent.width);
+    viewport.height = static_cast<float>(m_swapChainExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.extent = m_swapChainExtent;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(MeshletDrawConstants);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+    ThrowIfFailed(vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout), "Failed to create pipeline layout.");
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = static_cast<uint32_t>(std::size(shaderStages));
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.layout = m_pipelineLayout;
+    pipelineInfo.renderPass = m_renderPass;
+    pipelineInfo.subpass = 0;
+    ThrowIfFailed(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline), "Failed to create graphics pipeline.");
+
+    vkDestroyShaderModule(m_device, pixelShaderModule, nullptr);
+    vkDestroyShaderModule(m_device, meshShaderModule, nullptr);
+    vkDestroyShaderModule(m_device, taskShaderModule, nullptr);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateDepthResources()
+{
+    CreateImage(m_swapChainExtent.width, m_swapChainExtent.height, 1, DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, m_depthImage, m_depthImageMemory);
+    m_depthImageView = CreateImageView(m_depthImage, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateFramebuffers()
+{
+    m_framebuffers.resize(m_swapChainImageViews.size());
+    for (size_t i = 0; i < m_swapChainImageViews.size(); ++i)
+    {
+        std::array<VkImageView, 2> attachments = { m_swapChainImageViews[i], m_depthImageView };
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = m_renderPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
+        framebufferInfo.width = m_swapChainExtent.width;
+        framebufferInfo.height = m_swapChainExtent.height;
+        framebufferInfo.layers = 1;
+        ThrowIfFailed(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_framebuffers[i]), "Failed to create framebuffer.");
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateCommandPool()
+{
+    QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice);
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    ThrowIfFailed(vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool), "Failed to create command pool.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::LoadModel()
+{
+    m_scene = Bistro::LoadScene(Bistro::FindAssetRoot());
+    XMFLOAT3 center(
+        (m_scene.boundsMin.x + m_scene.boundsMax.x) * 0.5f,
+        (m_scene.boundsMin.y + m_scene.boundsMax.y) * 0.5f,
+        (m_scene.boundsMin.z + m_scene.boundsMax.z) * 0.5f);
+    const float radius = (std::max)((std::max)(m_scene.boundsMax.x - m_scene.boundsMin.x, m_scene.boundsMax.y - m_scene.boundsMin.y), m_scene.boundsMax.z - m_scene.boundsMin.z);
+    m_defaultCameraPosition = XMFLOAT3(center.x, center.y + radius * 0.18f, m_scene.boundsMin.z - radius * 0.25f);
+    m_defaultCameraYaw = 0.0f;
+    m_defaultCameraPitch = -0.08f;
+    ResetCameraView();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateVertexBuffer()
+{
+    VkDeviceSize bufferSize = sizeof(Bistro::Vertex) * m_scene.vertices.size();
+    CreateBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vertexBuffer, m_vertexBufferMemory);
+    void* data = nullptr;
+    vkMapMemory(m_device, m_vertexBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, m_scene.vertices.data(), static_cast<size_t>(bufferSize));
+    vkUnmapMemory(m_device, m_vertexBufferMemory);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateMeshletBuffers()
+{
+    auto uploadStorageBuffer = [this](const void* source, VkDeviceSize bufferSize, VkBuffer& buffer, VkDeviceMemory& memory)
+    {
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
+        void* data = nullptr;
+        vkMapMemory(m_device, memory, 0, bufferSize, 0, &data);
+        memcpy(data, source, static_cast<size_t>(bufferSize));
+        vkUnmapMemory(m_device, memory);
+    };
+
+    uploadStorageBuffer(m_scene.meshlets.data(), sizeof(Bistro::MeshletRecord) * m_scene.meshlets.size(), m_meshletBuffer, m_meshletBufferMemory);
+    uploadStorageBuffer(m_scene.meshletVertices.data(), sizeof(uint32_t) * m_scene.meshletVertices.size(), m_meshletVertexBuffer, m_meshletVertexBufferMemory);
+    uploadStorageBuffer(m_scene.meshletTriangles.data(), sizeof(uint32_t) * m_scene.meshletTriangles.size(), m_meshletTriangleBuffer, m_meshletTriangleBufferMemory);
+    uploadStorageBuffer(m_scene.meshletBounds.data(), sizeof(Bistro::MeshletBounds) * m_scene.meshletBounds.size(), m_meshletBoundsBuffer, m_meshletBoundsBufferMemory);
+}
+
+uint32_t BistroExteriorMeshShaderCullingVulkan::CreateTextureResource(const std::wstring& path, bool srgb, const uint8_t fallback[4], std::map<std::wstring, uint32_t>& cache)
+{
+    std::wstring key = path.empty() ? (std::wstring(L"fallback:") + std::to_wstring(fallback[0]) + L"," + std::to_wstring(fallback[1]) + L"," + std::to_wstring(fallback[2]) + L"," + std::to_wstring(fallback[3]) + (srgb ? L":srgb" : L":linear")) : path + (srgb ? L":srgb" : L":linear");
+    auto found = cache.find(key);
+    if (found != cache.end())
+    {
+        return found->second;
+    }
+
+    Bistro::TextureData image = Bistro::LoadTextureVulkan(path, srgb, fallback, m_textureCompressionBcSupported);
+    VkDeviceSize imageSize = static_cast<VkDeviceSize>(image.pixels.size());
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory stagingBufferMemory = VK_NULL_HANDLE;
+    CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    void* data = nullptr;
+    vkMapMemory(m_device, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, image.pixels.data(), static_cast<size_t>(imageSize));
+    vkUnmapMemory(m_device, stagingBufferMemory);
+
+    GpuTexture texture;
+    texture.path = path;
+    texture.width = image.width;
+    texture.height = image.height;
+    texture.fallback = image.fallback;
+    texture.format = ToVkFormat(image.format);
+    texture.mipLevels = image.mipLevels;
+    CreateImage(image.width, image.height, texture.mipLevels, texture.format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, texture.image, texture.memory);
+    TransitionImageLayout(texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture.mipLevels);
+    CopyBufferToImage(stagingBuffer, texture.image, image);
+    TransitionImageLayout(texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture.mipLevels);
+    texture.view = CreateImageView(texture.image, texture.format, VK_IMAGE_ASPECT_COLOR_BIT, texture.mipLevels);
+
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+
+    const uint32_t index = static_cast<uint32_t>(m_textures.size());
+    m_textures.push_back(texture);
+    cache[key] = index;
+    return index;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateTextureImages()
+{
+    const uint8_t white[] = { 255, 255, 255, 255 };
+    const uint8_t normal[] = { 128, 128, 255, 255 };
+    const uint8_t specular[] = { 255, 180, 0, 255 };
+    const uint8_t black[] = { 0, 0, 0, 255 };
+    std::map<std::wstring, uint32_t> textureCache;
+
+    m_materialTextureIndices.resize(m_scene.materials.size());
+    for (const Bistro::Material& material : m_scene.materials)
+    {
+        const size_t materialIndex = &material - m_scene.materials.data();
+        m_materialTextureIndices[materialIndex][0] = CreateTextureResource(material.textures[Bistro::TextureSlotBaseColor], true, white, textureCache);
+        m_materialTextureIndices[materialIndex][1] = CreateTextureResource(material.textures[Bistro::TextureSlotNormal], false, normal, textureCache);
+        m_materialTextureIndices[materialIndex][2] = CreateTextureResource(material.textures[Bistro::TextureSlotSpecular], false, specular, textureCache);
+        m_materialTextureIndices[materialIndex][3] = CreateTextureResource(material.textures[Bistro::TextureSlotEmissive], false, black, textureCache);
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateTextureSampler()
+{
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 16.0f;
+    samplerInfo.maxAnisotropy = m_samplerAnisotropySupported ? (std::min)(m_maxSamplerAnisotropy, 8.0f) : 1.0f;
+    samplerInfo.anisotropyEnable = m_samplerAnisotropySupported ? VK_TRUE : VK_FALSE;
+    ThrowIfFailed(vkCreateSampler(m_device, &samplerInfo, nullptr, &m_textureSampler), "Failed to create texture sampler.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateUniformBuffer()
+{
+    CreateBuffer(sizeof(SceneConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_sceneUniformBuffer, m_sceneUniformBufferMemory);
+
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    uint32_t alignment = static_cast<uint32_t>(properties.limits.minUniformBufferOffsetAlignment);
+    if (alignment == 0)
+    {
+        alignment = 256;
+    }
+    m_materialUniformStride = static_cast<uint32_t>((sizeof(MaterialConstants) + alignment - 1) & ~static_cast<size_t>(alignment - 1));
+    VkDeviceSize materialBufferSize = static_cast<VkDeviceSize>(m_materialUniformStride) * m_scene.materials.size();
+    CreateBuffer(materialBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_materialUniformBuffer, m_materialUniformBufferMemory);
+
+    void* data = nullptr;
+    vkMapMemory(m_device, m_materialUniformBufferMemory, 0, materialBufferSize, 0, &data);
+    for (size_t i = 0; i < m_scene.materials.size(); ++i)
+    {
+        MaterialConstants material{};
+        material.baseColorFactor = m_scene.materials[i].baseColorFactor;
+        material.options = XMFLOAT4(0.0f, 0.0f, m_scene.materials[i].alphaCutoff, m_scene.materials[i].alphaMasked ? 1.0f : 0.0f);
+        memcpy(static_cast<uint8_t*>(data) + i * m_materialUniformStride, &material, sizeof(material));
+    }
+    vkUnmapMemory(m_device, m_materialUniformBufferMemory);
+
+    UpdateUniformBuffer();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateDescriptorPool()
+{
+    std::array<VkDescriptorPoolSize, 4> poolSizes{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * 2);
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * Bistro::TextureSlotCount);
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    poolSizes[2].descriptorCount = static_cast<uint32_t>(m_scene.materials.size());
+    poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[3].descriptorCount = static_cast<uint32_t>(m_scene.materials.size() * 5);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = static_cast<uint32_t>(m_scene.materials.size());
+    ThrowIfFailed(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool), "Failed to create descriptor pool.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateDescriptorSets()
+{
+    m_descriptorSets.resize(m_scene.materials.size());
+    std::vector<VkDescriptorSetLayout> layouts(m_scene.materials.size(), m_descriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = m_descriptorPool;
+    allocateInfo.descriptorSetCount = static_cast<uint32_t>(m_descriptorSets.size());
+    allocateInfo.pSetLayouts = layouts.data();
+    ThrowIfFailed(vkAllocateDescriptorSets(m_device, &allocateInfo, m_descriptorSets.data()), "Failed to allocate descriptor sets.");
+
+    for (uint32_t materialIndex = 0; materialIndex < m_descriptorSets.size(); ++materialIndex)
+    {
+        VkDescriptorBufferInfo sceneInfo{};
+        sceneInfo.buffer = m_sceneUniformBuffer;
+        sceneInfo.offset = 0;
+        sceneInfo.range = sizeof(SceneConstants);
+
+        VkDescriptorBufferInfo materialInfo{};
+        materialInfo.buffer = m_materialUniformBuffer;
+        materialInfo.offset = static_cast<VkDeviceSize>(materialIndex) * m_materialUniformStride;
+        materialInfo.range = sizeof(MaterialConstants);
+
+        std::array<VkDescriptorImageInfo, Bistro::TextureSlotCount> imageInfos{};
+        for (uint32_t i = 0; i < Bistro::TextureSlotCount; ++i)
+        {
+            imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfos[i].imageView = m_textures[m_materialTextureIndices[materialIndex][i]].view;
+        }
+
+        VkDescriptorImageInfo samplerInfo{};
+        samplerInfo.sampler = m_textureSampler;
+
+        VkDescriptorBufferInfo vertexInfo{};
+        vertexInfo.buffer = m_vertexBuffer;
+        vertexInfo.offset = 0;
+        vertexInfo.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo meshletInfo{};
+        meshletInfo.buffer = m_meshletBuffer;
+        meshletInfo.offset = 0;
+        meshletInfo.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo meshletVertexInfo{};
+        meshletVertexInfo.buffer = m_meshletVertexBuffer;
+        meshletVertexInfo.offset = 0;
+        meshletVertexInfo.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo meshletTriangleInfo{};
+        meshletTriangleInfo.buffer = m_meshletTriangleBuffer;
+        meshletTriangleInfo.offset = 0;
+        meshletTriangleInfo.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo meshletBoundsInfo{};
+        meshletBoundsInfo.buffer = m_meshletBoundsBuffer;
+        meshletBoundsInfo.offset = 0;
+        meshletBoundsInfo.range = VK_WHOLE_SIZE;
+
+        std::array<VkDescriptorBufferInfo, 5> meshletBufferInfos = { vertexInfo, meshletInfo, meshletVertexInfo, meshletTriangleInfo, meshletBoundsInfo };
+
+        std::array<VkWriteDescriptorSet, 12> descriptorWrites{};
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = m_descriptorSets[materialIndex];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].pBufferInfo = &sceneInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = m_descriptorSets[materialIndex];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[1].pBufferInfo = &materialInfo;
+
+        for (uint32_t i = 0; i < Bistro::TextureSlotCount; ++i)
+        {
+            descriptorWrites[2 + i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2 + i].dstSet = m_descriptorSets[materialIndex];
+            descriptorWrites[2 + i].dstBinding = 2 + i;
+            descriptorWrites[2 + i].descriptorCount = 1;
+            descriptorWrites[2 + i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            descriptorWrites[2 + i].pImageInfo = &imageInfos[i];
+        }
+
+        descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[6].dstSet = m_descriptorSets[materialIndex];
+        descriptorWrites[6].dstBinding = 6;
+        descriptorWrites[6].descriptorCount = 1;
+        descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        descriptorWrites[6].pImageInfo = &samplerInfo;
+
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            descriptorWrites[7 + i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[7 + i].dstSet = m_descriptorSets[materialIndex];
+            descriptorWrites[7 + i].dstBinding = 7 + i;
+            descriptorWrites[7 + i].descriptorCount = 1;
+            descriptorWrites[7 + i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[7 + i].pBufferInfo = &meshletBufferInfos[i];
+        }
+
+        vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::InitializeImGui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = nullptr;
+
+    ImGui_ImplWin32_Init(m_hwnd);
+
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.ApiVersion = VK_API_VERSION_1_2;
+    initInfo.Instance = m_instance;
+    initInfo.PhysicalDevice = m_physicalDevice;
+    initInfo.Device = m_device;
+    initInfo.QueueFamily = FindQueueFamilies(m_physicalDevice).graphicsFamily;
+    initInfo.Queue = m_graphicsQueue;
+    initInfo.DescriptorPoolSize = 64;
+    initInfo.MinImageCount = MaxFramesInFlight;
+    initInfo.ImageCount = static_cast<uint32_t>(m_swapChainImages.size());
+    initInfo.PipelineInfoMain.RenderPass = m_renderPass;
+    initInfo.PipelineInfoMain.Subpass = 0;
+    initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    ThrowIfFailed(ImGui_ImplVulkan_Init(&initInfo) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED, "Failed to initialize ImGui Vulkan backend.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::ShutdownImGui()
+{
+    if (ImGui::GetCurrentContext())
+    {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::BuildUI()
+{
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::SetNextWindowPos(ImVec2(24.0f, 48.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390.0f, 450.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Bistro Controls");
+    ImGui::PushItemWidth(190.0f);
+    ImGui::TextUnformatted("Directional Light");
+    ImGui::DragFloat3("Light Direction", m_lightDirection, 0.01f, -1.0f, 1.0f, "%.2f");
+    ImGui::ColorEdit3("Light Color", m_lightColor);
+    ImGui::SliderFloat("Light Intensity", &m_lightIntensity, 0.0f, 10.0f, "%.2f");
+    if (ImGui::Button("Reset Light"))
+    {
+        ResetLight();
+    }
+    ImGui::Separator();
+    ImGui::TextUnformatted("Camera");
+    XMFLOAT3 cameraPosition = m_camera.GetPosition();
+    float cameraAngles[] =
+    {
+        XMConvertToDegrees(m_camera.GetYawRadians()),
+        XMConvertToDegrees(m_camera.GetPitchRadians())
+    };
+    bool cameraChanged = false;
+    cameraChanged |= ImGui::DragFloat3("Position", &cameraPosition.x, 0.1f, -10000.0f, 10000.0f, "%.2f");
+    if (ImGui::DragFloat2("Yaw / Pitch", cameraAngles, 0.25f, -360.0f, 360.0f, "%.1f deg"))
+    {
+        cameraAngles[1] = std::clamp(cameraAngles[1], -83.0f, 83.0f);
+        cameraChanged = true;
+    }
+    if (cameraChanged)
+    {
+        m_camera.Reset(cameraPosition, XMConvertToRadians(cameraAngles[0]), XMConvertToRadians(cameraAngles[1]));
+    }
+    if (ImGui::Button("Reset Camera View"))
+    {
+        ResetCameraView();
+    }
+    ImGui::SliderFloat("Move Speed", &m_baseMoveSpeed, 0.1f, 30.0f, "%.1f");
+    ImGui::SliderFloat("Fast Speed", &m_fastMoveSpeed, 0.1f, 80.0f, "%.1f");
+    if (ImGui::Button("Reset Camera Speed"))
+    {
+        ResetCameraSpeeds();
+    }
+    ImGui::Separator();
+    ImGui::TextUnformatted("Debug View");
+    const char* debugModes[] =
+    {
+        "Final",
+        "Base Color",
+        "World Normal",
+        "Normal Texture Raw",
+        "Normal Texture Decoded",
+        "AO / Roughness / Metallic",
+        "NdotL",
+        "Specular Texture Raw",
+        "Emissive Texture",
+        "Vertex Normal",
+        "Vertex Tangent",
+        "Vertex Bitangent",
+        "Tangent Handedness",
+        "Normal Mip Level",
+        "UV",
+        "Alpha",
+        "Normal Texture Status",
+        "Meshlet Color"
+    };
+    ImGui::Combo("Mode", &m_debugViewMode, debugModes, _countof(debugModes));
+    ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip);
+    ImGui::SliderInt("Force Normal Mip", &m_debugNormalForceMip, -1, 10);
+    ImGui::SliderFloat("Normal Mip Bias", &m_debugNormalMipBias, -4.0f, 4.0f, "%.2f");
+    if (ImGui::Button("Reset Normal Sampling"))
+    {
+        m_debugNormalForceMip = 0;
+        m_debugNormalMipBias = 0.0f;
+    }
+    ImGui::Text("Force -1 uses sampler LOD");
+    ImGui::PopItemWidth();
+    ImGui::End();
+
+    BuildRendererStatsUI();
+
+    ImGui::Render();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::BuildRendererStatsUI()
+{
+    int normalTextureCount = 0;
+    int normalFallbackCount = 0;
+    int normalOnePixelCount = 0;
+    for (const Bistro::Material& material : m_scene.materials)
+    {
+        const size_t materialIndex = &material - m_scene.materials.data();
+        if (!material.textures[Bistro::TextureSlotNormal].empty())
+        {
+            ++normalTextureCount;
+        }
+        if (materialIndex < m_materialTextureIndices.size())
+        {
+            const GpuTexture& normalTexture = m_textures[m_materialTextureIndices[materialIndex][Bistro::TextureSlotNormal]];
+            normalFallbackCount += normalTexture.fallback ? 1 : 0;
+            normalOnePixelCount += normalTexture.width <= 1 || normalTexture.height <= 1 ? 1 : 0;
+        }
+    }
+
+    uint64_t primitiveCount = 0;
+    uint64_t submittedIndexCount = 0;
+    for (const Bistro::DrawItem& draw : m_scene.draws)
+    {
+        submittedIndexCount += draw.indexCount;
+        primitiveCount += draw.indexCount / 3;
+    }
+
+    const ImGuiIO& io = ImGui::GetIO();
+    const float fps = io.Framerate;
+    const float frameTimeMs = fps > 0.0f ? 1000.0f / fps : 0.0f;
+
+    ImGui::SetNextWindowPos(ImVec2(430.0f, 48.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 300.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Renderer Stats");
+    ImGui::TextUnformatted("Frame");
+    ImGui::Text("API: Vulkan");
+    ImGui::Text("FPS: %.1f", fps);
+    ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
+    ImGui::Separator();
+    ImGui::TextUnformatted("Scene");
+    ImGui::Text("Materials: %zu", m_scene.materials.size());
+    ImGui::Text("Draw Calls: %zu", m_scene.draws.size());
+    ImGui::Text("Meshlet Dispatches: %zu", m_scene.meshletDispatchRanges.size());
+    ImGui::Text("Meshlets: %zu", m_scene.meshlets.size());
+    ImGui::Text("Visible Meshlets: %u", m_lastVisibleMeshlets);
+    ImGui::Text("Culled Meshlets: %u", static_cast<uint32_t>(m_scene.meshlets.size()) - m_lastVisibleMeshlets);
+    ImGui::Text("Vertices: %zu", m_scene.vertices.size());
+    ImGui::Text("Indices: %zu", m_scene.indices.size());
+    ImGui::Text("Submitted Indices: %llu", static_cast<unsigned long long>(submittedIndexCount));
+    ImGui::Text("Primitives: %llu", static_cast<unsigned long long>(primitiveCount));
+    ImGui::Text("Textures: %zu", m_textures.size());
+    ImGui::Separator();
+    ImGui::TextUnformatted("Texture Diagnostics");
+    ImGui::Text("Normal Maps: %d / %zu", normalTextureCount, m_scene.materials.size());
+    ImGui::Text("Normal Fallbacks: %d", normalFallbackCount);
+    ImGui::Text("Normal 1x1 SRVs: %d", normalOnePixelCount);
+    ImGui::End();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::ResetLight()
+{
+    m_lightDirection[0] = -0.35f;
+    m_lightDirection[1] = -0.8f;
+    m_lightDirection[2] = 0.45f;
+    m_lightColor[0] = 1.0f;
+    m_lightColor[1] = 0.96f;
+    m_lightColor[2] = 0.88f;
+    m_lightIntensity = 4.0f;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::ResetCameraView()
+{
+    m_camera.Reset(m_defaultCameraPosition, m_defaultCameraYaw, m_defaultCameraPitch);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::ResetCameraSpeeds()
+{
+    m_baseMoveSpeed = 5.0f;
+    m_fastMoveSpeed = 18.0f;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateCommandBuffers()
+{
+    m_commandBuffers.resize(m_framebuffers.size());
+    VkCommandBufferAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.commandPool = m_commandPool;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandBufferCount = static_cast<uint32_t>(m_commandBuffers.size());
+    ThrowIfFailed(vkAllocateCommandBuffers(m_device, &allocateInfo, m_commandBuffers.data()), "Failed to allocate command buffers.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::RecordCommandBuffer(uint32_t imageIndex)
+{
+    VkCommandBuffer commandBuffer = m_commandBuffers[imageIndex];
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    ThrowIfFailed(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin command buffer.");
+
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = { { 0.0f, 0.2f, 0.4f, 1.0f } };
+    clearValues[1].depthStencil = { 1.0f, 0 };
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_renderPass;
+    renderPassInfo.framebuffer = m_framebuffers[imageIndex];
+    renderPassInfo.renderArea.extent = m_swapChainExtent;
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
+    for (const Bistro::MeshletDispatchRange& range : m_scene.meshletDispatchRanges)
+    {
+        const uint32_t materialIndex = (std::min)(range.materialIndex, static_cast<uint32_t>(m_descriptorSets.size() - 1));
+        VkDescriptorSet descriptorSet = m_descriptorSets[materialIndex];
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+        uint32_t meshletBase = range.firstMeshlet;
+        uint32_t meshletsRemaining = range.meshletCount;
+        while (meshletsRemaining > 0)
+        {
+            const uint32_t meshletCount = (std::min)(meshletsRemaining, MaxMeshletsPerDispatch);
+            const uint32_t dispatchCount = (meshletCount + TaskThreadCount - 1) / TaskThreadCount;
+            MeshletDrawConstants constants{};
+            constants.meshletBase = meshletBase;
+            constants.meshletCount = meshletCount;
+            constants.debugMode = static_cast<uint32_t>(m_debugViewMode);
+            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(constants), &constants);
+            m_vkCmdDrawMeshTasksEXT(commandBuffer, dispatchCount, 1, 1);
+            meshletBase += meshletCount;
+            meshletsRemaining -= meshletCount;
+        }
+    }
+
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
+    vkCmdEndRenderPass(commandBuffer);
+    ThrowIfFailed(vkEndCommandBuffer(commandBuffer), "Failed to record command buffer.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateSyncObjects()
+{
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (uint32_t i = 0; i < MaxFramesInFlight; ++i)
+    {
+        ThrowIfFailed(vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]), "Failed to create image available semaphore.");
+        ThrowIfFailed(vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]), "Failed to create render finished semaphore.");
+        ThrowIfFailed(vkCreateFence(m_device, &fenceInfo, nullptr, &m_inFlightFences[i]), "Failed to create frame fence.");
+    }
+}
+
+void BistroExteriorMeshShaderCullingVulkan::UpdateUniformBuffer()
+{
+    auto now = std::chrono::steady_clock::now();
+    float delta = std::chrono::duration<float>(now - m_lastUpdate).count();
+    m_lastUpdate = now;
+    delta = (std::min)(delta, 0.05f);
+    m_camera.SetMoveSpeeds(m_baseMoveSpeed, m_fastMoveSpeed);
+    m_camera.Update(delta);
+
+    float aspectRatio = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
+    XMMATRIX view = m_camera.GetViewMatrix();
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(XMConvertToRadians(60.0f), aspectRatio, 0.1f, 1000.0f);
+    projection.r[1] = XMVectorNegate(projection.r[1]);
+    const XMMATRIX viewProjection = view * projection;
+
+    SceneConstants constants{};
+    XMStoreFloat4x4(&constants.viewProjection, viewProjection);
+    XMFLOAT3 cameraPosition = m_camera.GetPosition();
+    constants.cameraPosition = XMFLOAT4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 1.0f);
+    XMVECTOR lightDirection = XMVectorSet(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], 0.0f);
+    if (XMVectorGetX(XMVector3LengthSq(lightDirection)) < 0.0001f)
+    {
+        lightDirection = XMVectorSet(-0.35f, -0.8f, 0.45f, 0.0f);
+    }
+    lightDirection = XMVector3Normalize(lightDirection);
+    XMFLOAT3 normalizedLightDirection;
+    XMStoreFloat3(&normalizedLightDirection, lightDirection);
+    m_lightDirection[0] = normalizedLightDirection.x;
+    m_lightDirection[1] = normalizedLightDirection.y;
+    m_lightDirection[2] = normalizedLightDirection.z;
+    constants.lightDirection = XMFLOAT4(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], 0.0f);
+    constants.lightColor = XMFLOAT4(m_lightColor[0], m_lightColor[1], m_lightColor[2], m_lightIntensity);
+    constants.debugOptions = XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, static_cast<float>(m_debugNormalForceMip), m_debugNormalMipBias);
+    XMFLOAT4X4 viewProjectionValues{};
+    XMStoreFloat4x4(&viewProjectionValues, viewProjection);
+    constants.frustumPlanes[0] = NormalizePlane(viewProjectionValues._14 + viewProjectionValues._11, viewProjectionValues._24 + viewProjectionValues._21, viewProjectionValues._34 + viewProjectionValues._31, viewProjectionValues._44 + viewProjectionValues._41);
+    constants.frustumPlanes[1] = NormalizePlane(viewProjectionValues._14 - viewProjectionValues._11, viewProjectionValues._24 - viewProjectionValues._21, viewProjectionValues._34 - viewProjectionValues._31, viewProjectionValues._44 - viewProjectionValues._41);
+    constants.frustumPlanes[2] = NormalizePlane(viewProjectionValues._14 + viewProjectionValues._12, viewProjectionValues._24 + viewProjectionValues._22, viewProjectionValues._34 + viewProjectionValues._32, viewProjectionValues._44 + viewProjectionValues._42);
+    constants.frustumPlanes[3] = NormalizePlane(viewProjectionValues._14 - viewProjectionValues._12, viewProjectionValues._24 - viewProjectionValues._22, viewProjectionValues._34 - viewProjectionValues._32, viewProjectionValues._44 - viewProjectionValues._42);
+    constants.frustumPlanes[4] = NormalizePlane(viewProjectionValues._13, viewProjectionValues._23, viewProjectionValues._33, viewProjectionValues._43);
+    constants.frustumPlanes[5] = NormalizePlane(viewProjectionValues._14 - viewProjectionValues._13, viewProjectionValues._24 - viewProjectionValues._23, viewProjectionValues._34 - viewProjectionValues._33, viewProjectionValues._44 - viewProjectionValues._43);
+
+    m_lastVisibleMeshlets = 0;
+    for (const Bistro::MeshletBounds& bounds : m_scene.meshletBounds)
+    {
+        m_lastVisibleMeshlets += IsMeshletVisible(bounds, constants.frustumPlanes, cameraPosition) ? 1u : 0u;
+    }
+
+    void* data = nullptr;
+    vkMapMemory(m_device, m_sceneUniformBufferMemory, 0, sizeof(constants), 0, &data);
+    memcpy(data, &constants, sizeof(constants));
+    vkUnmapMemory(m_device, m_sceneUniformBufferMemory);
+}
+
+bool BistroExteriorMeshShaderCullingVulkan::IsDeviceSuitable(VkPhysicalDevice device) const
+{
+    QueueFamilyIndices indices = FindQueueFamilies(device);
+    if (!indices.IsComplete())
+    {
+        return false;
+    }
+
+    uint32_t extensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+    std::set<std::string> requiredExtensions(DeviceExtensions.begin(), DeviceExtensions.end());
+    for (const VkExtensionProperties& extension : availableExtensions)
+    {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    if (!requiredExtensions.empty())
+    {
+        return false;
+    }
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
+    meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    VkPhysicalDeviceFeatures2 features{};
+    features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features.pNext = &meshShaderFeatures;
+    vkGetPhysicalDeviceFeatures2(device, &features);
+    if (meshShaderFeatures.meshShader != VK_TRUE || meshShaderFeatures.taskShader != VK_TRUE)
+    {
+        return false;
+    }
+
+    SwapChainSupport support = QuerySwapChainSupport(device);
+    return !support.formats.empty() && !support.presentModes.empty();
+}
+
+BistroExteriorMeshShaderCullingVulkan::QueueFamilyIndices BistroExteriorMeshShaderCullingVulkan::FindQueueFamilies(VkPhysicalDevice device) const
+{
+    QueueFamilyIndices indices;
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+    for (uint32_t i = 0; i < queueFamilyCount; ++i)
+    {
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        VkBool32 presentSupport = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
+        if (presentSupport)
+        {
+            indices.presentFamily = i;
+        }
+
+        if (indices.IsComplete())
+        {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+BistroExteriorMeshShaderCullingVulkan::SwapChainSupport BistroExteriorMeshShaderCullingVulkan::QuerySwapChainSupport(VkPhysicalDevice device) const
+{
+    SwapChainSupport support;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &support.capabilities);
+
+    uint32_t formatCount = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+    support.formats.resize(formatCount);
+    if (formatCount > 0)
+    {
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, support.formats.data());
+    }
+
+    uint32_t presentModeCount = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+    support.presentModes.resize(presentModeCount);
+    if (presentModeCount > 0)
+    {
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, support.presentModes.data());
+    }
+
+    return support;
+}
+
+VkSurfaceFormatKHR BistroExteriorMeshShaderCullingVulkan::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const
+{
+    for (const VkSurfaceFormatKHR& format : formats)
+    {
+        if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            return format;
+        }
+    }
+
+    return formats[0];
+}
+
+VkPresentModeKHR BistroExteriorMeshShaderCullingVulkan::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes) const
+{
+    for (VkPresentModeKHR presentMode : presentModes)
+    {
+        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            return presentMode;
+        }
+    }
+
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D BistroExteriorMeshShaderCullingVulkan::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const
+{
+    if (capabilities.currentExtent.width != UINT32_MAX)
+    {
+        return capabilities.currentExtent;
+    }
+
+    VkExtent2D actualExtent = { m_width, m_height };
+    actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+    return actualExtent;
+}
+
+uint32_t BistroExteriorMeshShaderCullingVulkan::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
+{
+    VkPhysicalDeviceMemoryProperties memoryProperties{};
+    vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memoryProperties);
+
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
+    {
+        if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("Failed to find suitable Vulkan memory type.");
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory)
+{
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ThrowIfFailed(vkCreateBuffer(m_device, &bufferInfo, nullptr, &buffer), "Failed to create Vulkan buffer.");
+
+    VkMemoryRequirements memoryRequirements{};
+    vkGetBufferMemoryRequirements(m_device, buffer, &memoryRequirements);
+
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memoryRequirements.size;
+    allocateInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, properties);
+    ThrowIfFailed(vkAllocateMemory(m_device, &allocateInfo, nullptr, &memory), "Failed to allocate Vulkan buffer memory.");
+    vkBindBufferMemory(m_device, buffer, memory, 0);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageUsageFlags usage, VkImage& image, VkDeviceMemory& memory)
+{
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = mipLevels;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = format;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ThrowIfFailed(vkCreateImage(m_device, &imageInfo, nullptr, &image), "Failed to create Vulkan image.");
+
+    VkMemoryRequirements memoryRequirements{};
+    vkGetImageMemoryRequirements(m_device, image, &memoryRequirements);
+
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memoryRequirements.size;
+    allocateInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ThrowIfFailed(vkAllocateMemory(m_device, &allocateInfo, nullptr, &memory), "Failed to allocate Vulkan image memory.");
+    vkBindImageMemory(m_device, image, memory, 0);
+}
+
+VkImageView BistroExteriorMeshShaderCullingVulkan::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const
+{
+    VkImageViewCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createInfo.image = image;
+    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.format = format;
+    createInfo.subresourceRange.aspectMask = aspectFlags;
+    createInfo.subresourceRange.baseMipLevel = 0;
+    createInfo.subresourceRange.levelCount = mipLevels;
+    createInfo.subresourceRange.baseArrayLayer = 0;
+    createInfo.subresourceRange.layerCount = 1;
+
+    VkImageView imageView = VK_NULL_HANDLE;
+    ThrowIfFailed(vkCreateImageView(m_device, &createInfo, nullptr, &imageView), "Failed to create Vulkan image view.");
+    return imageView;
+}
+
+VkCommandBuffer BistroExteriorMeshShaderCullingVulkan::BeginSingleTimeCommands() const
+{
+    VkCommandBufferAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandPool = m_commandPool;
+    allocateInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    ThrowIfFailed(vkAllocateCommandBuffers(m_device, &allocateInfo, &commandBuffer), "Failed to allocate one-time command buffer.");
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    ThrowIfFailed(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin one-time command buffer.");
+    return commandBuffer;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::EndSingleTimeCommands(VkCommandBuffer commandBuffer) const
+{
+    ThrowIfFailed(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer.");
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    ThrowIfFailed(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit one-time command buffer.");
+    vkQueueWaitIdle(m_graphicsQueue);
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::CopyBufferToImage(VkBuffer buffer, VkImage image, const Bistro::TextureData& texture) const
+{
+    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+    std::vector<VkBufferImageCopy> regions(texture.mipLevels);
+    for (uint32_t mipIndex = 0; mipIndex < texture.mipLevels; ++mipIndex)
+    {
+        const Bistro::TextureMip& mip = texture.mips[mipIndex];
+        VkBufferImageCopy& region = regions[mipIndex];
+        region.bufferOffset = static_cast<VkDeviceSize>(mip.offset);
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = mipIndex;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent = { mip.width, mip.height, 1 };
+    }
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, static_cast<uint32_t>(regions.size()), regions.data());
+
+    EndSingleTimeCommands(commandBuffer);
+}
+
+void BistroExteriorMeshShaderCullingVulkan::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) const
+{
+    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = mipLevels;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else
+    {
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    EndSingleTimeCommands(commandBuffer);
+}
+
+std::vector<char> BistroExteriorMeshShaderCullingVulkan::ReadFile(const std::wstring& path) const
+{
+    std::ifstream file(path, std::ios::ate | std::ios::binary);
+    if (!file.is_open())
+    {
+        throw std::runtime_error("Failed to open shader file.");
+    }
+
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    return buffer;
+}
+
+VkShaderModule BistroExteriorMeshShaderCullingVulkan::CreateShaderModule(const std::vector<char>& code) const
+{
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule shaderModule = VK_NULL_HANDLE;
+    ThrowIfFailed(vkCreateShaderModule(m_device, &createInfo, nullptr, &shaderModule), "Failed to create shader module.");
+    return shaderModule;
+}
+
+std::wstring BistroExteriorMeshShaderCullingVulkan::GetExecutableDirectory() const
+{
+    wchar_t path[MAX_PATH]{};
+    DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length == MAX_PATH)
+    {
+        throw std::runtime_error("Failed to resolve executable path.");
+    }
+
+    wchar_t* lastSlash = wcsrchr(path, L'\\');
+    if (lastSlash)
+    {
+        *(lastSlash + 1) = L'\0';
+    }
+
+    return path;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::ThrowIfFailed(VkResult result, const char* message) const
+{
+    if (result != VK_SUCCESS)
+    {
+        throw std::runtime_error(message);
+    }
+}
