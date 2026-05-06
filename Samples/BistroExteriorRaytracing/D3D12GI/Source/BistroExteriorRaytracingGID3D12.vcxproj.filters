@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D401}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D402}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D403}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D404}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\Source Files">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D405}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\Header Files">
+      <UniqueIdentifier>{B05F1737-D781-471C-9D08-03B72386D406}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\D3D12\Source\BistroExteriorRaytracingD3D12.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroCamera.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroScene.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroTexture.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\D3D12\Source\DXSample.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\D3D12\Source\DXSampleHelper.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\D3D12\Source\stdafx.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\D3D12\Source\Win32Application.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imconfig.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_internal.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_dx12.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.h"><Filter>imgui\Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\D3D12\Source\BistroExteriorRaytracingD3D12.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroCamera.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroScene.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroTexture.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\D3D12\Source\DXSample.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Main.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\D3D12\Source\stdafx.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\D3D12\Source\Win32Application.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_draw.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_tables.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_widgets.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\BistroExteriorRaytracingGI.hlsl"><Filter>Shaders</Filter></CustomBuild>
+  </ItemGroup>
+</Project>

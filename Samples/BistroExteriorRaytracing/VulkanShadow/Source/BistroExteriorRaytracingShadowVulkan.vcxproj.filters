@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A02}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A04}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\Source Files">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui\Header Files">
+      <UniqueIdentifier>{4B1F2457-6993-4121-903B-AD7EE7BF8A06}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Vulkan\Source\BistroExteriorRaytracingVulkan.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroCamera.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroScene.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\..\Common\BistroTexture.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imconfig.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_internal.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_vulkan.h"><Filter>imgui\Header Files</Filter></ClInclude>
+    <ClInclude Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.h"><Filter>imgui\Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Vulkan\Source\BistroExteriorRaytracingVulkan.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroCamera.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroScene.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\..\Common\BistroTexture.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Main.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_draw.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_tables.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\imgui_widgets.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_vulkan.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+    <ClCompile Include="$(CodexdRepoRoot)ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>imgui\Source Files</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Shaders\BistroExteriorRaytracingShadow.hlsl"><Filter>Shaders</Filter></CustomBuild>
+  </ItemGroup>
+</Project>
