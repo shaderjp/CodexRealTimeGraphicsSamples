@@ -56,6 +56,19 @@ git submodule update --init --recursive
 
 各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。
 
+## 読み物 / 実装振り返り
+
+`docs` 配下に、サンプルの読み方や実装時に見えた設計ポイントをまとめた日本語記事を置いています。
+
+- [Bistro 実装前までの振り返り](docs/pre_bistro_implementation_review.ja.md)
+  Triangle、Cube3D、SciFiHelmet、Skinning、ImGuiLighting までの基礎サンプルを振り返ります。
+- [Bistro 取り組みの振り返り](docs/bistro_implementation_review.ja.md)
+  BistroExterior、Shadow Map、Mesh Shader、Raytracing までの流れをまとめています。
+- [Bistro Mesh Shader 実装の振り返り](docs/bistro_mesh_shader_implementation_review.ja.md)
+  Meshlet 生成、Mesh Shader、AS/TS culling、Shadow 版の読み方を整理しています。
+- [Bistro Raytracing 実装の振り返り](docs/bistro_raytracing_implementation_review.ja.md)
+  DXR / Vulkan Ray Tracing、BLAS/TLAS、SBT、shadow ray、1-bounce GI の読み方を整理しています。
+
 ## サンプル追加方針
 
 新しいサンプルは次の形で追加します。
