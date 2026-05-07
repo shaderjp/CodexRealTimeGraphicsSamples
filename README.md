@@ -74,6 +74,14 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/BistroExteriorRaytracing/VulkanShadow/Source/BistroExteriorRaytracingShadowVulkan.vcxproj`
 - `Samples/BistroExteriorRaytracing/D3D12GI/Source/BistroExteriorRaytracingGID3D12.vcxproj`
 - `Samples/BistroExteriorRaytracing/VulkanGI/Source/BistroExteriorRaytracingGIVulkan.vcxproj`
+- `Samples/BistroExteriorPathtracing/BistroExteriorPathtracing.sln`
+- `Samples/BistroExteriorPathtracing/README.md`
+- `Samples/BistroExteriorPathtracing/D3D12/Source/BistroExteriorPathtracingD3D12.vcxproj`
+- `Samples/BistroExteriorPathtracing/Vulkan/Source/BistroExteriorPathtracingVulkan.vcxproj`
+- `Samples/BistroExteriorPathtracing/D3D12ReSTIR/Source/BistroExteriorPathtracingReSTIRD3D12.vcxproj`
+- `Samples/BistroExteriorPathtracing/VulkanReSTIR/Source/BistroExteriorPathtracingReSTIRVulkan.vcxproj`
+- `Samples/BistroExteriorPathtracing/D3D12ReSTIRDI/Source/BistroExteriorPathtracingReSTIRDID3D12.vcxproj`
+- `Samples/BistroExteriorPathtracing/VulkanReSTIRDI/Source/BistroExteriorPathtracingReSTIRDIVulkan.vcxproj`
 - `Samples/Skinning/Skinning.sln`
 - `Samples/Skinning/README.md`
 - `Samples/Skinning/D3D12/Source/SkinningD3D12.vcxproj`
@@ -91,11 +99,23 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 `Samples/BistroExteriorRaytracing` renders Bistro Exterior through DXR and Vulkan Ray Tracing without a scene raster pass. It includes D3D12/Vulkan direct-light, ray-traced shadow, and simple 1-bounce GI variants, alpha-tested any-hit materials, bindless texture shading, ImGui debug views, and SBT/acceleration-structure renderer stats.
 
+`Samples/BistroExteriorPathtracing` renders Bistro Exterior as a progressive path tracer through DXR and Vulkan Ray Tracing. It includes D3D12/Vulkan baseline path tracing projects plus ReSTIR GI and ReSTIR DI comparison projects with reservoir temporal/spatial reuse, procedural sky/sun next-event estimation, stochastic diffuse/specular bounces, alpha-tested visibility rays, accumulation controls, a built-in lightweight denoiser, and path-tracing debug views.
+
 `Samples/Skinning` loads the glTF 2.0 Cesium Man asset and renders animated vertex shader skinning or compute shader skinning with joint matrices. The compute variants write skinned vertices into a GPU buffer before the graphics pass.
 
 ## Screenshot Gallery
 
-Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views.
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views. `Samples/BistroExteriorPathtracing` documents the progressive path tracing, ReSTIR GI, ReSTIR DI, and built-in denoiser controls.
+
+## Japanese Implementation Notes
+
+The `docs` folder includes Japanese implementation-review articles for reading the samples in order:
+
+- [Pre-Bistro implementation review](docs/pre_bistro_implementation_review.ja.md)
+- [Bistro implementation review](docs/bistro_implementation_review.ja.md)
+- [Bistro Mesh Shader implementation review](docs/bistro_mesh_shader_implementation_review.ja.md)
+- [Bistro Raytracing implementation review](docs/bistro_raytracing_implementation_review.ja.md)
+- [Bistro Pathtracing implementation review](docs/bistro_pathtracing_implementation_review.ja.md)
 
 ## Adding A Sample
 
