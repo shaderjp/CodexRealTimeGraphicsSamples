@@ -21,14 +21,27 @@
 - `GeometryIndex()` から共有 material / geometry record を参照
 - primary ray / shadow ray の any-hit alpha test による alpha masked material 対応
 - D3D12 descriptor table と Vulkan descriptor indexing による material texture の bindless 参照
-- 直接光、hard ray-traced shadow、1spp diffuse 1-bounce GI と temporal accumulation
-- ImGui から light、camera、sky、ray bias、shadow、GI strength、accumulation、debug view を調整
-- Debug View: Final、Base Color、World Normal、Normal Texture、Hit Distance、Direct、Shadow、Indirect、Accumulation Samples
+- 直接光、hard ray-traced shadow、diffuse 1-bounce GI と temporal accumulation
+- ray tracing の miss shader で評価する procedural gradient sky と sun disk
+- GI variant では secondary ray がシーンを miss したときに同じ空を skylight として indirect に寄与
+- progressive low-discrepancy GI sampling と、per-frame sample count、radiance clamp、temporal clamp によるノイズ低減
+- ImGui から light、camera、sky、ray bias、shadow、GI strength、GI noise reduction、accumulation、debug view を調整
+- Debug View: Final、Base Color、World Normal、Normal Texture、Hit Distance、Direct、Shadow、Indirect、Accumulation Samples、Sky
 - Renderer Stats: material、texture、vertex、index、primitive、BLAS geometry、TLAS instance、SBT record、output resolution、ray tracing limit
+
+## Procedural Sky
+
+空は ray tracing の miss shader で procedural に評価します。rasterized sky dome、skybox mesh、追加テクスチャアセットは使いません。Bistro の geometry に当たらなかった primary camera ray は、horizon / zenith / ground の gradient と、既存の directional light に方向を合わせた sun disk を返します。
+
+Direct / Shadow variant では、この procedural sky は見た目上の背景と fallback miss radiance としてだけ使います。surface の direct lighting モデルには新しい ambient skylight 項を足していません。GI variant では secondary diffuse ray も同じ miss shader を通るため、シーン外へ抜けた ray が空の radiance を 1-bounce indirect の簡易 skylight として持ち帰ります。
+
+## GI Noise Reduction
+
+GI variant は引き続きシンプルな 1-bounce diffuse モデルですが、secondary ray sampling は hash random ではなく progressive low-discrepancy sampling にしています。`GI Samples / Frame` は 1 フレームで平均する secondary ray 数、`GI Radiance Clamp` は accumulation 前の明るい firefly sample の抑制、`GI Temporal Clamp` は新しいフレームが accumulated history から離れすぎるのを抑える設定です。
 
 ## スクリーンショット
 
-下の画像は 3 段階の renderer variant を示しています。GI サンプルは ray tracing output と accumulation input を確認するための主要な debug view を載せています。
+下の画像は 3 段階の renderer variant を示しています。GI サンプルは procedural sky と軽量 GI ノイズ低減の追加後の Final / Indirect debug view を載せています。
 
 ### 直接光
 
@@ -44,21 +57,13 @@
 
 ### GI Debug Views
 
-| D3D12 Final | D3D12 Hit Distance |
+| D3D12 Final | D3D12 Indirect |
 | --- | --- |
-| ![BistroExteriorRaytracing GI D3D12 final](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_29.png) | ![BistroExteriorRaytracing GI D3D12 hit distance](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_39.png) |
+| ![BistroExteriorRaytracing GI D3D12 final](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_07%2022_15_05.png) | ![BistroExteriorRaytracing GI D3D12 indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_07%2022_15_21.png) |
 
-| D3D12 Shadow | D3D12 Indirect |
+| Vulkan Final | Vulkan Indirect |
 | --- | --- |
-| ![BistroExteriorRaytracing GI D3D12 shadow debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_50.png) | ![BistroExteriorRaytracing GI D3D12 indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_55.png) |
-
-| Vulkan Final | Vulkan Hit Distance |
-| --- | --- |
-| ![BistroExteriorRaytracing GI Vulkan final](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_36.png) | ![BistroExteriorRaytracing GI Vulkan hit distance](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_43.png) |
-
-| Vulkan Shadow | Vulkan Indirect |
-| --- | --- |
-| ![BistroExteriorRaytracing GI Vulkan shadow debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_54.png) | ![BistroExteriorRaytracing GI Vulkan indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_32_01.png) |
+| ![BistroExteriorRaytracing GI Vulkan final](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_07%2022_16_53.png) | ![BistroExteriorRaytracing GI Vulkan indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_07%2022_17_05.png) |
 
 ## アセット
 

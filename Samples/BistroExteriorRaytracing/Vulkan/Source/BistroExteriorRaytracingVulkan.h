@@ -59,8 +59,13 @@ private:
         DirectX::XMFLOAT4 lightColor;
         DirectX::XMFLOAT4 debugOptions;
         DirectX::XMFLOAT4 skyColor;
+        DirectX::XMFLOAT4 skyHorizonColor;
+        DirectX::XMFLOAT4 skyZenithColor;
+        DirectX::XMFLOAT4 skyGroundColor;
+        DirectX::XMFLOAT4 skyOptions;
         DirectX::XMFLOAT4 rayOptions;
         DirectX::XMFLOAT4 frameOptions;
+        DirectX::XMFLOAT4 giOptions;
     };
 
     struct GpuBuffer
@@ -237,10 +242,20 @@ private:
     float m_lightColor[3] = { 1.0f, 0.96f, 0.88f };
     float m_lightIntensity = 4.0f;
     float m_skyColor[3] = { 0.015f, 0.08f, 0.16f };
+    float m_skyHorizonColor[3] = { 0.42f, 0.63f, 0.86f };
+    float m_skyZenithColor[3] = { 0.05f, 0.20f, 0.52f };
+    float m_skyGroundColor[3] = { 0.025f, 0.035f, 0.045f };
     float m_skyIntensity = 1.0f;
+    float m_sunIntensity = 8.0f;
+    float m_sunAngularRadius = 0.012f;
+    float m_skyGroundBlend = 0.35f;
     float m_rayTMin = 0.03f;
     float m_rayTMax = 10000.0f;
     float m_giStrength = 0.6f;
+    int m_giSamplesPerFrame = 2;
+    float m_giRadianceClamp = 8.0f;
+    float m_giTemporalClampScale = 1.5f;
+    float m_giTemporalClampMin = 0.25f;
     int m_maxAccumulatedFrames = 64;
     uint32_t m_accumulatedFrames = 0;
     uint32_t m_frameCounter = 0;
@@ -251,8 +266,10 @@ private:
     int m_debugViewMode = 0;
     bool m_debugNormalMapYFlip = true;
     bool m_shadowEnabled = true;
+    bool m_skyEnabled = true;
     DirectX::XMFLOAT4 m_lastCameraAndYaw = DirectX::XMFLOAT4(0, 0, 0, 0);
     DirectX::XMFLOAT4 m_lastLighting = DirectX::XMFLOAT4(0, 0, 0, 0);
+    DirectX::XMFLOAT4 m_lastGiOptions = DirectX::XMFLOAT4(0, 0, 0, 0);
     bool m_samplerAnisotropySupported = false;
     bool m_textureCompressionBcSupported = false;
     float m_maxSamplerAnisotropy = 1.0f;
