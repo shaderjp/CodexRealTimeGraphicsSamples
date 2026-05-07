@@ -21,14 +21,27 @@ Japanese documentation is available in [README.ja.md](README.ja.md).
 - `GeometryIndex()`-based lookup into shared material and geometry records
 - Alpha-masked material support with any-hit alpha testing for primary and shadow rays
 - Bindless material texture access for D3D12 descriptor tables and Vulkan descriptor indexing
-- Direct lighting, hard ray-traced shadows, and 1-spp diffuse 1-bounce GI with temporal accumulation
-- ImGui controls for light, camera, sky, ray bias, shadows, GI strength, accumulation, and debug views
-- Debug views: Final, Base Color, World Normal, Normal Texture, Hit Distance, Direct, Shadow, Indirect, Accumulation Samples
+- Direct lighting, hard ray-traced shadows, and diffuse 1-bounce GI with temporal accumulation
+- Procedural gradient sky with a sun disk evaluated in the ray tracing miss shader
+- Skylight contribution in the GI variants when secondary rays miss the scene
+- Progressive low-discrepancy GI sampling with per-frame sample count, radiance clamp, and temporal clamp controls
+- ImGui controls for light, camera, sky, ray bias, shadows, GI strength, GI noise reduction, accumulation, and debug views
+- Debug views: Final, Base Color, World Normal, Normal Texture, Hit Distance, Direct, Shadow, Indirect, Accumulation Samples, Sky
 - Renderer stats for materials, textures, vertices, indices, primitives, BLAS geometries, TLAS instances, SBT records, output resolution, and ray tracing limits
+
+## Procedural Sky
+
+The sky is evaluated procedurally in the ray tracing miss shader. No rasterized sky dome, skybox mesh, or extra texture asset is added. Primary camera rays that miss the Bistro geometry return a horizon/zenith/ground gradient plus a sun disk aligned with the existing directional light.
+
+In the direct-light and shadow variants, this procedural sky is only the visible background and fallback miss radiance; surface lighting remains the existing direct-light model. In the GI variants, secondary diffuse rays use the same miss shader, so rays that escape the scene bring the sky radiance back as a simple skylight contribution to the 1-bounce indirect term.
+
+## GI Noise Reduction
+
+The GI variants still use a simple 1-bounce diffuse model, but the secondary ray sampling is progressive and low-discrepancy instead of purely hashed random. `GI Samples / Frame` controls how many secondary rays are averaged per frame, `GI Radiance Clamp` suppresses bright firefly samples before accumulation, and `GI Temporal Clamp` limits how far a new frame can move away from the accumulated history.
 
 ## Screenshots
 
-The screenshots below show the three staged renderer variants. The GI sample images focus on the main debug views used to inspect ray tracing output and accumulation inputs.
+The screenshots below show the three staged renderer variants. The GI sample images focus on the Final and Indirect debug views after procedural sky and lightweight GI noise-reduction controls were added.
 
 ### Direct Light
 
@@ -44,21 +57,13 @@ The screenshots below show the three staged renderer variants. The GI sample ima
 
 ### GI Debug Views
 
-| D3D12 Final | D3D12 Hit Distance |
+| D3D12 Final | D3D12 Indirect |
 | --- | --- |
-| ![BistroExteriorRaytracing GI D3D12 final](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_29.png) | ![BistroExteriorRaytracing GI D3D12 hit distance](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_39.png) |
+| ![BistroExteriorRaytracing GI D3D12 final](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_07%2022_15_05.png) | ![BistroExteriorRaytracing GI D3D12 indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_07%2022_15_21.png) |
 
-| D3D12 Shadow | D3D12 Indirect |
+| Vulkan Final | Vulkan Indirect |
 | --- | --- |
-| ![BistroExteriorRaytracing GI D3D12 shadow debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_50.png) | ![BistroExteriorRaytracing GI D3D12 indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20D3D12%202026_05_06%2013_30_55.png) |
-
-| Vulkan Final | Vulkan Hit Distance |
-| --- | --- |
-| ![BistroExteriorRaytracing GI Vulkan final](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_36.png) | ![BistroExteriorRaytracing GI Vulkan hit distance](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_43.png) |
-
-| Vulkan Shadow | Vulkan Indirect |
-| --- | --- |
-| ![BistroExteriorRaytracing GI Vulkan shadow debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_31_54.png) | ![BistroExteriorRaytracing GI Vulkan indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_06%2013_32_01.png) |
+| ![BistroExteriorRaytracing GI Vulkan final](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_07%2022_16_53.png) | ![BistroExteriorRaytracing GI Vulkan indirect debug](../../docs/images/BistroExteriorRaytracing%20GI%20Vulkan%202026_05_07%2022_17_05.png) |
 
 ## Assets
 

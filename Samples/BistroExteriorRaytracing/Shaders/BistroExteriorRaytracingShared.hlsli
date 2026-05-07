@@ -18,8 +18,13 @@ struct SceneConstants
     float4 lightColor;
     float4 debugOptions;
     float4 skyColor;
+    float4 skyHorizonColor;
+    float4 skyZenithColor;
+    float4 skyGroundColor;
+    float4 skyOptions;
     float4 rayOptions;
     float4 frameOptions;
+    float4 giOptions;
 };
 
 struct MeshVertex
@@ -108,6 +113,11 @@ float Random01(inout uint state)
     return (float)(state & 0x00ffffffu) / 16777216.0f;
 }
 
+float HashToUnitFloat(uint value)
+{
+    return (float)(Hash(value) & 0x00ffffffu) / 16777216.0f;
+}
+
 float3 Tonemap(float3 value)
 {
     value = max(value, 0.0f.xxx);
@@ -118,6 +128,69 @@ float3 Tonemap(float3 value)
 float3 DebugColorVector(float3 value)
 {
     return normalize(value) * 0.5f + 0.5f;
+}
+
+float Luminance(float3 color)
+{
+    return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+}
+
+float3 EvaluateSky(float3 rayDirection)
+{
+    float3 fallback = g_scene.skyColor.rgb * g_scene.skyColor.a;
+    if (g_scene.skyOptions.w < 0.5f)
+    {
+        return fallback;
+    }
+
+    float3 direction = normalize(rayDirection);
+    float upperAmount = saturate(direction.y);
+    float groundBlend = max(g_scene.skyOptions.z, 0.001f);
+    float lowerAmount = saturate(-direction.y / groundBlend);
+    float3 upperSky = lerp(g_scene.skyHorizonColor.rgb, g_scene.skyZenithColor.rgb, pow(upperAmount, 0.65f));
+    float3 lowerSky = lerp(g_scene.skyHorizonColor.rgb, g_scene.skyGroundColor.rgb, lowerAmount);
+    float3 sky = direction.y >= 0.0f ? upperSky : lowerSky;
+
+    float3 sunDirection = normalize(-g_scene.lightDirection.xyz);
+    float sunCos = dot(direction, sunDirection);
+    float sunRadius = max(g_scene.skyOptions.y, 0.001f);
+    float sunDisk = smoothstep(cos(sunRadius * 2.0f), cos(sunRadius), sunCos);
+    float sunGlow = pow(saturate(sunCos), 64.0f) * 0.12f;
+    sky += g_scene.lightColor.rgb * g_scene.skyOptions.x * (sunDisk + sunGlow);
+    return sky * g_scene.skyColor.a;
+}
+
+float2 ProgressiveGiSample(uint2 pixel, uint sampleIndex)
+{
+    const float2 r2 = float2(0.754877666f, 0.569840296f);
+    uint seed = pixel.x * 1973u + pixel.y * 9277u;
+    float2 rotation = float2(HashToUnitFloat(seed), HashToUnitFloat(seed ^ 0x9e3779b9u));
+    return frac(rotation + (float)(sampleIndex + 1u) * r2);
+}
+
+float3 ClampGiRadiance(float3 radiance)
+{
+    float limit = max(g_scene.giOptions.y, 0.0f);
+    if (limit <= 0.0f)
+    {
+        return radiance;
+    }
+
+    float value = max(Luminance(max(radiance, 0.0f.xxx)), 0.0001f);
+    return value > limit ? radiance * (limit / value) : radiance;
+}
+
+float3 ApplyTemporalClamp(float3 current, float3 history, uint accumulatedFrames)
+{
+    if (accumulatedFrames == 0u)
+    {
+        return current;
+    }
+
+    float clampScale = max(g_scene.giOptions.z, 0.0f);
+    float clampMin = max(g_scene.giOptions.w, 0.0f);
+    float3 extent = max(abs(history) * clampScale, clampMin.xxx);
+    return clamp(current, history - extent, history + extent);
 }
 
 uint3 LoadTriangleIndices(RtGeometryRecord geometry, uint primitiveIndex)
@@ -307,8 +380,10 @@ void RayGen()
     ray.TMin = g_scene.rayOptions.x;
     ray.TMax = g_scene.rayOptions.y;
 
+    float3 skyRadiance = EvaluateSky(ray.Direction);
+
     RayPayload payload;
-    payload.color = g_scene.skyColor.rgb * g_scene.skyColor.a;
+    payload.color = skyRadiance;
     payload.hitT = 0.0f;
     payload.directColor = 0.0f.xxx;
     payload.depth = 0;
@@ -338,8 +413,10 @@ void RayGen()
     }
     else
     {
+        float3 history = g_accumulation[pixel].rgb;
+        color = ApplyTemporalClamp(color, history, accumulatedFrames);
         float weight = 1.0f / (float)(min(accumulatedFrames, maxAccumulatedFrames - 1u) + 1u);
-        color = lerp(g_accumulation[pixel].rgb, color, weight);
+        color = lerp(history, color, weight);
         g_accumulation[pixel] = float4(color, 1.0f);
     }
     if (debugMode == 8)
@@ -347,6 +424,7 @@ void RayGen()
         color = ((float)accumulatedFrames / (float)maxAccumulatedFrames).xxx;
     }
 #endif
+    if (debugMode == 9) color = skyRadiance;
 
     g_output[pixel] = float4(Tonemap(color), 1.0f);
 }
@@ -354,7 +432,7 @@ void RayGen()
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-    payload.color = g_scene.skyColor.rgb * g_scene.skyColor.a;
+    payload.color = EvaluateSky(WorldRayDirection());
     payload.hit = 0;
 }
 
@@ -395,27 +473,35 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     if (payload.depth == 0)
     {
         uint2 pixel = DispatchRaysIndex().xy;
-        uint seed = Hash(pixel.x * 1973u + pixel.y * 9277u + (uint)g_scene.frameOptions.w * 26699u);
-        float3 giDirection = SampleCosineHemisphere(float2(Random01(seed), Random01(seed)), surface.normal);
+        uint samplesPerFrame = clamp((uint)round(g_scene.giOptions.x), 1u, 4u);
+        uint firstSampleIndex = (uint)round(g_scene.frameOptions.w) * samplesPerFrame;
 
-        RayDesc giRay;
-        giRay.Origin = surface.position + surface.normal * g_scene.rayOptions.x;
-        giRay.Direction = giDirection;
-        giRay.TMin = g_scene.rayOptions.x;
-        giRay.TMax = g_scene.rayOptions.y;
+        for (uint localSampleIndex = 0; localSampleIndex < samplesPerFrame; ++localSampleIndex)
+        {
+            float2 sample = ProgressiveGiSample(pixel, firstSampleIndex + localSampleIndex);
+            float3 giDirection = SampleCosineHemisphere(sample, surface.normal);
 
-        RayPayload giPayload;
-        giPayload.color = g_scene.skyColor.rgb * g_scene.skyColor.a;
-        giPayload.hitT = 0.0f;
-        giPayload.directColor = 0.0f.xxx;
-        giPayload.depth = 1;
-        giPayload.indirectColor = 0.0f.xxx;
-        giPayload.hit = 0;
-        giPayload.baseColor = 0.0f.xxx;
-        giPayload.shadowed = 0;
-        giPayload.normal = 0.0f.xxx;
-        TraceRay(g_sceneAs, RAY_FLAG_NONE, 0xff, 0, 0, 0, giRay, giPayload);
-        indirect = giPayload.color * surface.baseColor * g_scene.rayOptions.z;
+            RayDesc giRay;
+            giRay.Origin = surface.position + surface.normal * g_scene.rayOptions.x;
+            giRay.Direction = giDirection;
+            giRay.TMin = g_scene.rayOptions.x;
+            giRay.TMax = g_scene.rayOptions.y;
+
+            RayPayload giPayload;
+            giPayload.color = EvaluateSky(giRay.Direction);
+            giPayload.hitT = 0.0f;
+            giPayload.directColor = 0.0f.xxx;
+            giPayload.depth = 1;
+            giPayload.indirectColor = 0.0f.xxx;
+            giPayload.hit = 0;
+            giPayload.baseColor = 0.0f.xxx;
+            giPayload.shadowed = 0;
+            giPayload.normal = 0.0f.xxx;
+            TraceRay(g_sceneAs, RAY_FLAG_NONE, 0xff, 0, 0, 0, giRay, giPayload);
+            indirect += ClampGiRadiance(giPayload.color);
+        }
+
+        indirect = indirect * (surface.baseColor * g_scene.rayOptions.z / (float)samplesPerFrame);
     }
 #endif
 

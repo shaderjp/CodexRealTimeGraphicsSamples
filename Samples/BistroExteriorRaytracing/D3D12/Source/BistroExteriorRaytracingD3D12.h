@@ -63,8 +63,13 @@ private:
         XMFLOAT4 lightColor;
         XMFLOAT4 debugOptions;
         XMFLOAT4 skyColor;
+        XMFLOAT4 skyHorizonColor;
+        XMFLOAT4 skyZenithColor;
+        XMFLOAT4 skyGroundColor;
+        XMFLOAT4 skyOptions;
         XMFLOAT4 rayOptions;
         XMFLOAT4 frameOptions;
+        XMFLOAT4 giOptions;
     };
 
     struct GpuTexture
@@ -144,10 +149,20 @@ private:
     float m_lightColor[3] = { 1.0f, 0.96f, 0.88f };
     float m_lightIntensity = 4.0f;
     float m_skyColor[3] = { 0.015f, 0.08f, 0.16f };
+    float m_skyHorizonColor[3] = { 0.42f, 0.63f, 0.86f };
+    float m_skyZenithColor[3] = { 0.05f, 0.20f, 0.52f };
+    float m_skyGroundColor[3] = { 0.025f, 0.035f, 0.045f };
     float m_skyIntensity = 1.0f;
+    float m_sunIntensity = 8.0f;
+    float m_sunAngularRadius = 0.012f;
+    float m_skyGroundBlend = 0.35f;
     float m_rayTMin = 0.03f;
     float m_rayTMax = 10000.0f;
     float m_giStrength = 0.6f;
+    int m_giSamplesPerFrame = 2;
+    float m_giRadianceClamp = 8.0f;
+    float m_giTemporalClampScale = 1.5f;
+    float m_giTemporalClampMin = 0.25f;
     int m_maxAccumulatedFrames = 64;
     uint32_t m_accumulatedFrames = 0;
     uint32_t m_frameCounter = 0;
@@ -158,11 +173,13 @@ private:
     int m_debugViewMode = 0;
     bool m_debugNormalMapYFlip = true;
     bool m_shadowEnabled = true;
+    bool m_skyEnabled = true;
     bool m_vsyncEnabled = false;
     bool m_tearingSupported = false;
     D3D12_RAYTRACING_TIER m_raytracingTier = D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
     XMFLOAT4 m_lastCameraAndYaw = XMFLOAT4(0, 0, 0, 0);
     XMFLOAT4 m_lastLighting = XMFLOAT4(0, 0, 0, 0);
+    XMFLOAT4 m_lastGiOptions = XMFLOAT4(0, 0, 0, 0);
 
     HANDLE m_fenceEvent = nullptr;
     ComPtr<ID3D12Fence> m_fence;

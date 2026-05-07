@@ -1346,12 +1346,18 @@ void BistroExteriorRaytracingVulkan::BuildUI()
     if (ImGui::Button("Reset Camera Speed")) ResetCameraSpeeds();
     ImGui::Separator();
     ImGui::TextUnformatted("Ray Tracing");
-    const char* debugModes[] = { "Final", "Base Color", "World Normal", "Normal Texture", "Hit Distance", "Direct", "Shadow", "Indirect", "Accumulation Samples" };
+    const char* debugModes[] = { "Final", "Base Color", "World Normal", "Normal Texture", "Hit Distance", "Direct", "Shadow", "Indirect", "Accumulation Samples", "Sky" };
     if (ImGui::Combo("Debug View", &m_debugViewMode, debugModes, _countof(debugModes))) ResetAccumulation();
     if (ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip)) ResetAccumulation();
     if (ImGui::SliderFloat("Ray Bias / TMin", &m_rayTMin, 0.001f, 0.25f, "%.3f")) ResetAccumulation();
+    if (ImGui::Checkbox("Sky Enabled", &m_skyEnabled)) ResetAccumulation();
     if (ImGui::ColorEdit3("Sky Color", m_skyColor)) ResetAccumulation();
+    if (ImGui::ColorEdit3("Sky Horizon Color", m_skyHorizonColor)) ResetAccumulation();
+    if (ImGui::ColorEdit3("Sky Zenith Color", m_skyZenithColor)) ResetAccumulation();
+    if (ImGui::ColorEdit3("Sky Ground Color", m_skyGroundColor)) ResetAccumulation();
     if (ImGui::SliderFloat("Sky Intensity", &m_skyIntensity, 0.0f, 10.0f, "%.2f")) ResetAccumulation();
+    if (ImGui::SliderFloat("Sun Intensity", &m_sunIntensity, 0.0f, 50.0f, "%.2f")) ResetAccumulation();
+    if (ImGui::SliderFloat("Sun Size", &m_sunAngularRadius, 0.001f, 0.08f, "%.3f")) ResetAccumulation();
     if (m_mode != BistroRaytracingMode::Direct)
     {
         if (ImGui::Checkbox("Ray Traced Shadows", &m_shadowEnabled)) ResetAccumulation();
@@ -1361,6 +1367,9 @@ void BistroExteriorRaytracingVulkan::BuildUI()
         ImGui::Separator();
         ImGui::TextUnformatted("GI");
         if (ImGui::SliderFloat("GI Strength", &m_giStrength, 0.0f, 4.0f, "%.2f")) ResetAccumulation();
+        if (ImGui::SliderInt("GI Samples / Frame", &m_giSamplesPerFrame, 1, 4)) ResetAccumulation();
+        if (ImGui::SliderFloat("GI Radiance Clamp", &m_giRadianceClamp, 1.0f, 50.0f, "%.1f")) ResetAccumulation();
+        if (ImGui::SliderFloat("GI Temporal Clamp", &m_giTemporalClampScale, 0.25f, 4.0f, "%.2f")) ResetAccumulation();
         if (ImGui::SliderInt("Max Accum Samples", &m_maxAccumulatedFrames, 1, 512)) ResetAccumulation();
         ImGui::Checkbox("Freeze Accumulation", &m_freezeAccumulation);
         if (ImGui::Button("Reset Accumulation")) ResetAccumulation();
@@ -1445,12 +1454,15 @@ bool BistroExteriorRaytracingVulkan::HasAccumulationStateChanged()
     DirectX::XMFLOAT3 cameraPosition = m_camera.GetPosition();
     DirectX::XMFLOAT4 cameraAndYaw(cameraPosition.x, cameraPosition.y, cameraPosition.z, m_camera.GetYawRadians() + m_camera.GetPitchRadians());
     DirectX::XMFLOAT4 lighting(m_lightDirection[0], m_lightDirection[1], m_lightDirection[2], m_lightIntensity + m_giStrength + static_cast<float>(m_debugViewMode));
+    DirectX::XMFLOAT4 giOptions(static_cast<float>(m_giSamplesPerFrame), m_giRadianceClamp, m_giTemporalClampScale, m_giTemporalClampMin);
     const bool changed =
         m_resetAccumulationRequested ||
         memcmp(&cameraAndYaw, &m_lastCameraAndYaw, sizeof(DirectX::XMFLOAT4)) != 0 ||
-        memcmp(&lighting, &m_lastLighting, sizeof(DirectX::XMFLOAT4)) != 0;
+        memcmp(&lighting, &m_lastLighting, sizeof(DirectX::XMFLOAT4)) != 0 ||
+        memcmp(&giOptions, &m_lastGiOptions, sizeof(DirectX::XMFLOAT4)) != 0;
     m_lastCameraAndYaw = cameraAndYaw;
     m_lastLighting = lighting;
+    m_lastGiOptions = giOptions;
     m_resetAccumulationRequested = false;
     return changed;
 }
@@ -1476,8 +1488,13 @@ void BistroExteriorRaytracingVulkan::UpdateUniformBuffer(float)
     constants.lightColor = DirectX::XMFLOAT4(m_lightColor[0], m_lightColor[1], m_lightColor[2], m_lightIntensity);
     constants.debugOptions = DirectX::XMFLOAT4(static_cast<float>(m_debugViewMode), m_debugNormalMapYFlip ? 1.0f : 0.0f, m_shadowEnabled ? 1.0f : 0.0f, 0.0f);
     constants.skyColor = DirectX::XMFLOAT4(m_skyColor[0], m_skyColor[1], m_skyColor[2], m_skyIntensity);
+    constants.skyHorizonColor = DirectX::XMFLOAT4(m_skyHorizonColor[0], m_skyHorizonColor[1], m_skyHorizonColor[2], 0.0f);
+    constants.skyZenithColor = DirectX::XMFLOAT4(m_skyZenithColor[0], m_skyZenithColor[1], m_skyZenithColor[2], 0.0f);
+    constants.skyGroundColor = DirectX::XMFLOAT4(m_skyGroundColor[0], m_skyGroundColor[1], m_skyGroundColor[2], 0.0f);
+    constants.skyOptions = DirectX::XMFLOAT4(m_sunIntensity, m_sunAngularRadius, m_skyGroundBlend, m_skyEnabled ? 1.0f : 0.0f);
     constants.rayOptions = DirectX::XMFLOAT4(m_rayTMin, m_rayTMax, m_giStrength, 0.0f);
     constants.frameOptions = DirectX::XMFLOAT4(static_cast<float>(m_accumulatedFrames), static_cast<float>(m_maxAccumulatedFrames), m_freezeAccumulation ? 1.0f : 0.0f, static_cast<float>(m_frameCounter));
+    constants.giOptions = DirectX::XMFLOAT4(static_cast<float>(m_giSamplesPerFrame), m_giRadianceClamp, m_giTemporalClampScale, m_giTemporalClampMin);
 
     void* mapped = nullptr;
     vkMapMemory(m_device, m_sceneUniformBuffer.memory, 0, sizeof(constants), 0, &mapped);
