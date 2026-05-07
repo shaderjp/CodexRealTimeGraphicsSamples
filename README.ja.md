@@ -46,6 +46,8 @@ git submodule update --init --recursive
   同じ Bistro Exterior シーンを Mesh Shader pipeline で描画します。D3D12 / Vulkan の直接光、AS/TS meshlet culling、shadow map、shadow map + culling variant を含み、meshoptimizer による実行時 meshlet 生成、ImGui の `Meshlet Color` デバッグ表示、meshlet dispatch / culling 統計を確認できます。
 - `Samples/BistroExteriorRaytracing`
   同じ Bistro Exterior シーンを DXR と Vulkan Ray Tracing で描画します。シーン用 raster pass は使わず、D3D12 / Vulkan の直接光、ray-traced shadow、簡易 1-bounce GI variant、alpha test any-hit、bindless texture shading、ImGui debug view、SBT / acceleration structure 統計を確認できます。
+- `Samples/BistroExteriorPathtracing`
+  同じ Bistro Exterior シーンを DXR と Vulkan Ray Tracing の progressive path tracer として描画します。D3D12 / Vulkan の通常 path tracing project と reservoir temporal / spatial reuse を持つ ReSTIR GI / ReSTIR DI 比較用 project を含み、procedural sky / sun next-event estimation、diffuse / specular bounce、alpha-tested visibility ray、accumulation controls、built-in denoiser、path tracing debug view を確認できます。
 - `Samples/Skinning`
   glTF 2.0 Cesium Man を読み込み、Joint Matrix の Constant Buffer を使った Vertex Shader Skinning / Compute Shader Skinning でアニメーション描画。
   Compute Shader Skinning 版は GPU 上の skinned vertex buffer に書き出してから描画します。
@@ -54,7 +56,7 @@ git submodule update --init --recursive
 
 ## スクリーンショット
 
-各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。
+各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。`Samples/BistroExteriorPathtracing` では progressive path tracing、ReSTIR GI、ReSTIR DI 比較用 project、built-in denoiser control を説明しています。
 
 ## 読み物 / 実装振り返り
 
@@ -63,11 +65,13 @@ git submodule update --init --recursive
 - [Bistro 実装前までの振り返り](docs/pre_bistro_implementation_review.ja.md)
   Triangle、Cube3D、SciFiHelmet、Skinning、ImGuiLighting までの基礎サンプルを振り返ります。
 - [Bistro 取り組みの振り返り](docs/bistro_implementation_review.ja.md)
-  BistroExterior、Shadow Map、Mesh Shader、Raytracing までの流れをまとめています。
+  BistroExterior、Shadow Map、Mesh Shader、Raytracing、Pathtracing までの流れをまとめています。
 - [Bistro Mesh Shader 実装の振り返り](docs/bistro_mesh_shader_implementation_review.ja.md)
   Meshlet 生成、Mesh Shader、AS/TS culling、Shadow 版の読み方を整理しています。
 - [Bistro Raytracing 実装の振り返り](docs/bistro_raytracing_implementation_review.ja.md)
-  DXR / Vulkan Ray Tracing、BLAS/TLAS、SBT、shadow ray、1-bounce GI の読み方を整理しています。
+  DXR / Vulkan Ray Tracing、BLAS/TLAS、SBT、shadow ray、procedural sky、1-bounce GI の読み方を整理しています。
+- [Bistro Pathtracing 実装の振り返り](docs/bistro_pathtracing_implementation_review.ja.md)
+  Progressive path tracing、ReSTIR GI / DI、light list、accumulation、built-in denoiser の読み方を整理しています。
 
 ## サンプル追加方針
 
