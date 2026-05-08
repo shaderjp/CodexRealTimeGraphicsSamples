@@ -42,6 +42,8 @@ git submodule update --init --recursive
   SciFiHelmet の描画に Dear ImGui を統合し、ディレクショナルライトの方向、色、強度を実行時に編集。
 - `Samples/BistroExterior`
   Amazon Lumberyard Bistro Exterior を外部の `Bistro_v5_2` フォルダから Assimp で読み込み、DirectXTex で DDS/TGA テクスチャを扱い、広いシーンを FPS 風カメラで移動しながら描画。D3D12 / Vulkan の Shadow Map 版も同じソリューションに含み、ImGui からディレクショナルライト shadow のパラメータとデバッグ表示を操作できます。
+- `Samples/BistroExteriorClusteredForward`
+  Bistro Exterior の emissive material / emissive texture と procedural light proxy から多光源を生成し、通常の Many Lights Forward と compute shader で作る Clustered Forward light list を比較します。D3D12 / Vulkan の ManyLights 版と ClusteredForward 版を含み、directional shadow map、local light、active light count、cluster slice、overflow、shadow factor などを ImGui から確認できます。
 - `Samples/BistroExteriorMeshShader`
   同じ Bistro Exterior シーンを Mesh Shader pipeline で描画します。D3D12 / Vulkan の直接光、AS/TS meshlet culling、shadow map、shadow map + culling variant を含み、meshoptimizer による実行時 meshlet 生成、ImGui の `Meshlet Color` デバッグ表示、meshlet dispatch / culling 統計を確認できます。
 - `Samples/BistroExteriorRaytracing`
@@ -56,7 +58,7 @@ git submodule update --init --recursive
 
 ## スクリーンショット
 
-各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。`Samples/BistroExteriorPathtracing` では progressive path tracing、ReSTIR GI、ReSTIR DI 比較用 project、built-in denoiser control を説明しています。
+各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorClusteredForward` では Many Lights Forward と Clustered Forward の比較用 control / debug view に加えて directional shadow map の control / debug view を説明しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。`Samples/BistroExteriorPathtracing` では progressive path tracing、ReSTIR GI、ReSTIR DI 比較用 project、built-in denoiser control を説明しています。
 
 ## 読み物 / 実装振り返り
 
@@ -65,13 +67,24 @@ git submodule update --init --recursive
 - [Bistro 実装前までの振り返り](docs/pre_bistro_implementation_review.ja.md)
   Triangle、Cube3D、SciFiHelmet、Skinning、ImGuiLighting までの基礎サンプルを振り返ります。
 - [Bistro 取り組みの振り返り](docs/bistro_implementation_review.ja.md)
-  BistroExterior、Shadow Map、Mesh Shader、Raytracing、Pathtracing までの流れをまとめています。
+  BistroExterior、Shadow Map、Clustered Forward、Mesh Shader、Raytracing、Pathtracing までの流れをまとめています。
+- [Bistro Clustered Forward 実装の振り返り](docs/bistro_clustered_forward_implementation_review.ja.md)
+  Emissive / procedural proxy light、多光源 forward、cluster light list、directional shadow map の読み方を整理しています。
 - [Bistro Mesh Shader 実装の振り返り](docs/bistro_mesh_shader_implementation_review.ja.md)
   Meshlet 生成、Mesh Shader、AS/TS culling、Shadow 版の読み方を整理しています。
 - [Bistro Raytracing 実装の振り返り](docs/bistro_raytracing_implementation_review.ja.md)
   DXR / Vulkan Ray Tracing、BLAS/TLAS、SBT、shadow ray、procedural sky、1-bounce GI の読み方を整理しています。
 - [Bistro Pathtracing 実装の振り返り](docs/bistro_pathtracing_implementation_review.ja.md)
   Progressive path tracing、ReSTIR GI / DI、light list、accumulation、built-in denoiser の読み方を整理しています。
+
+同じシリーズの英語版も用意しています。
+
+- [Pre-Bistro implementation review](docs/pre_bistro_implementation_review.md)
+- [Bistro implementation review](docs/bistro_implementation_review.md)
+- [Bistro Clustered Forward implementation review](docs/bistro_clustered_forward_implementation_review.md)
+- [Bistro Mesh Shader implementation review](docs/bistro_mesh_shader_implementation_review.md)
+- [Bistro Raytracing implementation review](docs/bistro_raytracing_implementation_review.md)
+- [Bistro Pathtracing implementation review](docs/bistro_pathtracing_implementation_review.md)
 
 ## サンプル追加方針
 

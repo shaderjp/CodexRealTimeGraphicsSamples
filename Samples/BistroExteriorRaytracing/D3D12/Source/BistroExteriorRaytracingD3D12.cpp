@@ -177,13 +177,9 @@ void BistroExteriorRaytracingD3D12::LoadAssets()
         m_geometryRecords.push_back(record);
     }
 
-    const XMFLOAT3 center(
-        (m_scene.boundsMin.x + m_scene.boundsMax.x) * 0.5f,
-        (m_scene.boundsMin.y + m_scene.boundsMax.y) * 0.5f,
-        (m_scene.boundsMin.z + m_scene.boundsMax.z) * 0.5f);
-    m_defaultCameraPosition = XMFLOAT3(center.x, center.y + 3.0f, m_scene.boundsMin.z - 20.0f);
-    m_defaultCameraYaw = 0.0f;
-    m_defaultCameraPitch = -0.08f;
+    m_defaultCameraPosition = XMFLOAT3(-16.32f, 4.66f, -10.41f);
+    m_defaultCameraYaw = XMConvertToRadians(18.1f);
+    m_defaultCameraPitch = XMConvertToRadians(2.8f);
     ResetCameraView();
     ResetCameraSpeeds();
 
@@ -874,8 +870,8 @@ void BistroExteriorRaytracingD3D12::ResetCameraView()
 
 void BistroExteriorRaytracingD3D12::ResetCameraSpeeds()
 {
-    m_baseMoveSpeed = 5.0f;
-    m_fastMoveSpeed = 18.0f;
+    m_baseMoveSpeed = 17.0f;
+    m_fastMoveSpeed = 58.2f;
     m_camera.SetMoveSpeeds(m_baseMoveSpeed, m_fastMoveSpeed);
 }
 

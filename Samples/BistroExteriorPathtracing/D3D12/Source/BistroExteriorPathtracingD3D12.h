@@ -163,9 +163,9 @@ private:
     ShaderTableInfo m_hitGroupTable;
 
     Bistro::FpsCamera m_camera;
-    XMFLOAT3 m_defaultCameraPosition = XMFLOAT3(0.0f, 3.0f, -10.0f);
-    float m_defaultCameraYaw = 0.0f;
-    float m_defaultCameraPitch = 0.0f;
+    XMFLOAT3 m_defaultCameraPosition = XMFLOAT3(-16.32f, 4.66f, -10.41f);
+    float m_defaultCameraYaw = DirectX::XMConvertToRadians(18.1f);
+    float m_defaultCameraPitch = DirectX::XMConvertToRadians(2.8f);
     std::chrono::steady_clock::time_point m_lastUpdate;
     float m_lightDirection[3] = { -0.35f, -0.8f, 0.45f };
     float m_lightColor[3] = { 1.0f, 0.96f, 0.88f };
@@ -196,8 +196,8 @@ private:
     uint32_t m_frameCounter = 0;
     bool m_freezeAccumulation = false;
     bool m_resetAccumulationRequested = true;
-    float m_baseMoveSpeed = 5.0f;
-    float m_fastMoveSpeed = 18.0f;
+    float m_baseMoveSpeed = 17.0f;
+    float m_fastMoveSpeed = 58.2f;
     int m_debugViewMode = 0;
     bool m_debugNormalMapYFlip = true;
     bool m_shadowEnabled = true;

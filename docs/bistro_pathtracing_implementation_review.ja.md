@@ -2,10 +2,11 @@
 
 このドキュメントは、`Samples/BistroExteriorPathtracing` の実装を振り返りながら、Bistro Exterior を progressive path tracer として読むための入門メモです。
 
-前提となる記事は次の 4 つです。
+前提となる記事は次の 5 つです。
 
 - [Bistro 実装前までの振り返り](pre_bistro_implementation_review.ja.md)
 - [Bistro 取り組みの振り返り](bistro_implementation_review.ja.md)
+- [Bistro Clustered Forward 実装の振り返り](bistro_clustered_forward_implementation_review.ja.md)
 - [Bistro Mesh Shader 実装の振り返り](bistro_mesh_shader_implementation_review.ja.md)
 - [Bistro Raytracing 実装の振り返り](bistro_raytracing_implementation_review.ja.md)
 

@@ -23,11 +23,11 @@ namespace Bistro
         DirectX::XMFLOAT3 GetPosition() const;
 
     private:
-        DirectX::XMFLOAT3 m_position = DirectX::XMFLOAT3(0.0f, 3.0f, -10.0f);
-        float m_yaw = 0.0f;
-        float m_pitch = 0.0f;
-        float m_baseMoveSpeed = 5.0f;
-        float m_fastMoveSpeed = 18.0f;
+        DirectX::XMFLOAT3 m_position = DirectX::XMFLOAT3(-16.32f, 4.66f, -10.41f);
+        float m_yaw = DirectX::XMConvertToRadians(18.1f);
+        float m_pitch = DirectX::XMConvertToRadians(2.8f);
+        float m_baseMoveSpeed = 17.0f;
+        float m_fastMoveSpeed = 58.2f;
         bool m_active = true;
         bool m_lookActive = false;
         POINT m_lastMouse = {};

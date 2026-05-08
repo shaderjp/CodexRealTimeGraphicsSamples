@@ -127,14 +127,9 @@ void BistroExteriorD3D12::LoadAssets()
 {
     m_scene = Bistro::LoadScene(Bistro::FindAssetRoot());
 
-    XMFLOAT3 center(
-        (m_scene.boundsMin.x + m_scene.boundsMax.x) * 0.5f,
-        (m_scene.boundsMin.y + m_scene.boundsMax.y) * 0.5f,
-        (m_scene.boundsMin.z + m_scene.boundsMax.z) * 0.5f);
-    const float radius = (std::max)((std::max)(m_scene.boundsMax.x - m_scene.boundsMin.x, m_scene.boundsMax.y - m_scene.boundsMin.y), m_scene.boundsMax.z - m_scene.boundsMin.z);
-    m_defaultCameraPosition = XMFLOAT3(center.x, center.y + radius * 0.18f, m_scene.boundsMin.z - radius * 0.25f);
-    m_defaultCameraYaw = 0.0f;
-    m_defaultCameraPitch = -0.08f;
+    m_defaultCameraPosition = XMFLOAT3(-16.32f, 4.66f, -10.41f);
+    m_defaultCameraYaw = XMConvertToRadians(18.1f);
+    m_defaultCameraPitch = XMConvertToRadians(2.8f);
     ResetCameraView();
 
     CreateRootSignature();
@@ -691,8 +686,8 @@ void BistroExteriorD3D12::ResetCameraView()
 
 void BistroExteriorD3D12::ResetCameraSpeeds()
 {
-    m_baseMoveSpeed = 5.0f;
-    m_fastMoveSpeed = 18.0f;
+    m_baseMoveSpeed = 17.0f;
+    m_fastMoveSpeed = 58.2f;
 }
 
 void BistroExteriorD3D12::AllocateImGuiDescriptor(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)

@@ -56,6 +56,12 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/BistroExterior/Vulkan/Source/BistroExteriorVulkan.vcxproj`
 - `Samples/BistroExterior/D3D12Shadow/Source/BistroExteriorShadowD3D12.vcxproj`
 - `Samples/BistroExterior/VulkanShadow/Source/BistroExteriorShadowVulkan.vcxproj`
+- `Samples/BistroExteriorClusteredForward/BistroExteriorClusteredForward.sln`
+- `Samples/BistroExteriorClusteredForward/README.md`
+- `Samples/BistroExteriorClusteredForward/D3D12ManyLights/Source/BistroExteriorManyLightsD3D12.vcxproj`
+- `Samples/BistroExteriorClusteredForward/VulkanManyLights/Source/BistroExteriorManyLightsVulkan.vcxproj`
+- `Samples/BistroExteriorClusteredForward/D3D12ClusteredForward/Source/BistroExteriorClusteredForwardD3D12.vcxproj`
+- `Samples/BistroExteriorClusteredForward/VulkanClusteredForward/Source/BistroExteriorClusteredForwardVulkan.vcxproj`
 - `Samples/BistroExteriorMeshShader/BistroExteriorMeshShader.sln`
 - `Samples/BistroExteriorMeshShader/README.md`
 - `Samples/BistroExteriorMeshShader/D3D12/Source/BistroExteriorMeshShaderD3D12.vcxproj`
@@ -95,6 +101,8 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 `Samples/BistroExterior` loads Amazon Lumberyard Bistro Exterior from an external `Bistro_v5_2` folder through Assimp, reads DDS/TGA textures through DirectXTex, and adds an FPS-style camera for navigating the large scene. The same solution also includes D3D12/Vulkan shadow-map variants with ImGui controls for directional light shadows and debug views.
 
+`Samples/BistroExteriorClusteredForward` adds many local lights to Bistro Exterior from emissive materials/textures plus procedural light proxies. It includes D3D12/Vulkan direct many-light forward projects and clustered forward projects that build a compute-generated cluster light list, plus a directional shadow-map pass with ImGui controls and debug views for local-light contribution, cluster light count, slices, overflow, and shadow factors.
+
 `Samples/BistroExteriorMeshShader` renders the same Bistro Exterior scene through Mesh Shader pipelines. It includes D3D12/Vulkan direct-light, AS/TS meshlet-culling, shadow-map, and shadow-map+culling variants, runtime meshlet generation through meshoptimizer, ImGui `Meshlet Color` debug display, and renderer stats for meshlet dispatch and culling counts.
 
 `Samples/BistroExteriorRaytracing` renders Bistro Exterior through DXR and Vulkan Ray Tracing without a scene raster pass. It includes D3D12/Vulkan direct-light, ray-traced shadow, and simple 1-bounce GI variants, alpha-tested any-hit materials, bindless texture shading, ImGui debug views, and SBT/acceleration-structure renderer stats.
@@ -105,17 +113,20 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 ## Screenshot Gallery
 
-Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views. `Samples/BistroExteriorPathtracing` documents the progressive path tracing, ReSTIR GI, ReSTIR DI, and built-in denoiser controls.
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorClusteredForward` documents the many-light and clustered-forward comparison controls, including directional shadow-map controls and debug views. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views. `Samples/BistroExteriorPathtracing` documents the progressive path tracing, ReSTIR GI, ReSTIR DI, and built-in denoiser controls.
 
-## Japanese Implementation Notes
+## Implementation Notes
 
-The `docs` folder includes Japanese implementation-review articles for reading the samples in order:
+The `docs` folder includes implementation-review articles for reading the samples in order:
 
-- [Pre-Bistro implementation review](docs/pre_bistro_implementation_review.ja.md)
-- [Bistro implementation review](docs/bistro_implementation_review.ja.md)
-- [Bistro Mesh Shader implementation review](docs/bistro_mesh_shader_implementation_review.ja.md)
-- [Bistro Raytracing implementation review](docs/bistro_raytracing_implementation_review.ja.md)
-- [Bistro Pathtracing implementation review](docs/bistro_pathtracing_implementation_review.ja.md)
+| Topic | English | Japanese |
+| --- | --- | --- |
+| Pre-Bistro foundations | [English](docs/pre_bistro_implementation_review.md) | [日本語](docs/pre_bistro_implementation_review.ja.md) |
+| Bistro raster baseline | [English](docs/bistro_implementation_review.md) | [日本語](docs/bistro_implementation_review.ja.md) |
+| Bistro Clustered Forward | [English](docs/bistro_clustered_forward_implementation_review.md) | [日本語](docs/bistro_clustered_forward_implementation_review.ja.md) |
+| Bistro Mesh Shader | [English](docs/bistro_mesh_shader_implementation_review.md) | [日本語](docs/bistro_mesh_shader_implementation_review.ja.md) |
+| Bistro Raytracing | [English](docs/bistro_raytracing_implementation_review.md) | [日本語](docs/bistro_raytracing_implementation_review.ja.md) |
+| Bistro Pathtracing | [English](docs/bistro_pathtracing_implementation_review.md) | [日本語](docs/bistro_pathtracing_implementation_review.ja.md) |
 
 ## Adding A Sample
 

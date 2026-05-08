@@ -2,12 +2,13 @@
 
 このドキュメントは、`Samples/BistroExteriorMeshShader` の実装を振り返りながら、Mesh Shader と meshlet culling を入門者向けに読むためのメモです。
 
-前提となる記事は次の 2 つです。
+前提となる記事は次の 3 つです。
 
 - [Bistro 実装前までの振り返り](pre_bistro_implementation_review.ja.md)
 - [Bistro 取り組みの振り返り](bistro_implementation_review.ja.md)
+- [Bistro Clustered Forward 実装の振り返り](bistro_clustered_forward_implementation_review.ja.md)
 
-前者では Triangle、Cube3D、SciFiHelmet、Skinning、ImGuiLighting までの基礎を扱い、後者では BistroExterior、Shadow、Mesh Shader、Raytracing、Pathtracing までを大きく俯瞰しました。このドキュメントでは、その中から Mesh Shader 版だけを取り出し、「通常の raster sample から何が変わったのか」「どの順番で読むと理解しやすいか」を整理します。
+最初の記事では Triangle、Cube3D、SciFiHelmet、Skinning、ImGuiLighting までの基礎を扱い、Bistro 取り組みの振り返りでは BistroExterior、Shadow、Clustered Forward、Mesh Shader、Raytracing、Pathtracing までを大きく俯瞰しました。Clustered Forward の記事では、同じラスタライズの枠内で多光源と GPU compute の light list を扱いました。このドキュメントでは、その次の段階として Mesh Shader 版だけを取り出し、「通常の raster sample から何が変わったのか」「どの順番で読むと理解しやすいか」を整理します。
 
 ## 対象範囲
 
