@@ -1720,8 +1720,8 @@ void BistroExteriorPathtracingVulkan::ResetCameraView()
 
 void BistroExteriorPathtracingVulkan::ResetCameraSpeeds()
 {
-    m_baseMoveSpeed = 5.0f;
-    m_fastMoveSpeed = 18.0f;
+    m_baseMoveSpeed = 17.0f;
+    m_fastMoveSpeed = 58.2f;
     m_camera.SetMoveSpeeds(m_baseMoveSpeed, m_fastMoveSpeed);
 }
 

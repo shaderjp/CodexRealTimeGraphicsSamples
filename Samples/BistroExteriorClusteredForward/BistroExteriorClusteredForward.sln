@@ -1,0 +1,50 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BistroExteriorClusteredForward", "BistroExteriorClusteredForward", "{8EAD4358-CC55-4405-9194-B8205EED5F15}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorManyLightsD3D12", "D3D12ManyLights\Source\BistroExteriorManyLightsD3D12.vcxproj", "{4FC1B64D-1428-415F-8D5A-7EE779EA8444}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorManyLightsVulkan", "VulkanManyLights\Source\BistroExteriorManyLightsVulkan.vcxproj", "{24C39606-A404-43BD-8330-F4CC6BC43008}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorClusteredForwardD3D12", "D3D12ClusteredForward\Source\BistroExteriorClusteredForwardD3D12.vcxproj", "{960BD20B-7E49-4F31-BA64-6745B84E93AE}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorClusteredForwardVulkan", "VulkanClusteredForward\Source\BistroExteriorClusteredForwardVulkan.vcxproj", "{B50EB18A-C7E5-438E-A074-88CC33E85F1E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4FC1B64D-1428-415F-8D5A-7EE779EA8444}.Debug|x64.ActiveCfg = Debug|x64
+		{4FC1B64D-1428-415F-8D5A-7EE779EA8444}.Debug|x64.Build.0 = Debug|x64
+		{4FC1B64D-1428-415F-8D5A-7EE779EA8444}.Release|x64.ActiveCfg = Release|x64
+		{4FC1B64D-1428-415F-8D5A-7EE779EA8444}.Release|x64.Build.0 = Release|x64
+		{24C39606-A404-43BD-8330-F4CC6BC43008}.Debug|x64.ActiveCfg = Debug|x64
+		{24C39606-A404-43BD-8330-F4CC6BC43008}.Debug|x64.Build.0 = Debug|x64
+		{24C39606-A404-43BD-8330-F4CC6BC43008}.Release|x64.ActiveCfg = Release|x64
+		{24C39606-A404-43BD-8330-F4CC6BC43008}.Release|x64.Build.0 = Release|x64
+		{960BD20B-7E49-4F31-BA64-6745B84E93AE}.Debug|x64.ActiveCfg = Debug|x64
+		{960BD20B-7E49-4F31-BA64-6745B84E93AE}.Debug|x64.Build.0 = Debug|x64
+		{960BD20B-7E49-4F31-BA64-6745B84E93AE}.Release|x64.ActiveCfg = Release|x64
+		{960BD20B-7E49-4F31-BA64-6745B84E93AE}.Release|x64.Build.0 = Release|x64
+		{B50EB18A-C7E5-438E-A074-88CC33E85F1E}.Debug|x64.ActiveCfg = Debug|x64
+		{B50EB18A-C7E5-438E-A074-88CC33E85F1E}.Debug|x64.Build.0 = Debug|x64
+		{B50EB18A-C7E5-438E-A074-88CC33E85F1E}.Release|x64.ActiveCfg = Release|x64
+		{B50EB18A-C7E5-438E-A074-88CC33E85F1E}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4FC1B64D-1428-415F-8D5A-7EE779EA8444} = {8EAD4358-CC55-4405-9194-B8205EED5F15}
+		{24C39606-A404-43BD-8330-F4CC6BC43008} = {8EAD4358-CC55-4405-9194-B8205EED5F15}
+		{960BD20B-7E49-4F31-BA64-6745B84E93AE} = {8EAD4358-CC55-4405-9194-B8205EED5F15}
+		{B50EB18A-C7E5-438E-A074-88CC33E85F1E} = {8EAD4358-CC55-4405-9194-B8205EED5F15}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {59EFEF74-1396-4A1E-B567-18EF311AE790}
+	EndGlobalSection
+EndGlobal

@@ -2,15 +2,16 @@
 
 このドキュメントは、`Samples/BistroExteriorRaytracing` の実装を振り返りながら、DXR と Vulkan Ray Tracing を入門者向けに読むためのメモです。
 
-前提となる記事は次の 3 つです。
+前提となる記事は次の 4 つです。
 
 - [Bistro 実装前までの振り返り](pre_bistro_implementation_review.ja.md)
 - [Bistro 取り組みの振り返り](bistro_implementation_review.ja.md)
+- [Bistro Clustered Forward 実装の振り返り](bistro_clustered_forward_implementation_review.ja.md)
 - [Bistro Mesh Shader 実装の振り返り](bistro_mesh_shader_implementation_review.ja.md)
 
 この次の発展形として、progressive path tracing と ReSTIR 系の比較を扱う [Bistro Pathtracing 実装の振り返り](bistro_pathtracing_implementation_review.ja.md) も追加しています。
 
-Bistro の通常ラスタ版では、vertex shader / pixel shader と draw call でシーンを描きました。Mesh Shader 版では、geometry submission を meshlet dispatch に置き換えました。Raytracing 版では、さらに一歩進み、シーンの可視性そのものを primary ray で解決します。
+Bistro の通常ラスタ版では、vertex shader / pixel shader と draw call でシーンを描きました。Clustered Forward 版では、同じラスタライズの枠内で多光源と compute 生成の light list を扱いました。Mesh Shader 版では、geometry submission を meshlet dispatch に置き換えました。Raytracing 版では、さらに一歩進み、シーンの可視性そのものを primary ray で解決します。
 
 このドキュメントでは、「通常の raster pass がない renderer をどう読むか」「DXR と Vulkan Ray Tracing の対応をどう見るか」「direct light、shadow、GI の段階をどう分けて理解するか」を整理します。
 
