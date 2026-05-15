@@ -50,6 +50,8 @@ git submodule update --init --recursive
   同じ Bistro Exterior シーンを DXR と Vulkan Ray Tracing で描画します。シーン用 raster pass は使わず、D3D12 / Vulkan の直接光、ray-traced shadow、簡易 1-bounce GI variant、alpha test any-hit、bindless texture shading、ImGui debug view、SBT / acceleration structure 統計を確認できます。
 - `Samples/BistroExteriorPathtracing`
   同じ Bistro Exterior シーンを DXR と Vulkan Ray Tracing の progressive path tracer として描画します。D3D12 / Vulkan の通常 path tracing project と reservoir temporal / spatial reuse を持つ ReSTIR GI / ReSTIR DI 比較用 project を含み、procedural sky / sun next-event estimation、diffuse / specular bounce、alpha-tested visibility ray、accumulation controls、built-in denoiser、path tracing debug view を確認できます。
+- `Samples/BistroInteriorPathtracing`
+  Bistro Interior シーンを同じ progressive path tracing、ReSTIR GI / DI、denoiser 構成で描画します。`BistroInterior.fbx` を読み込み、室内向けの camera、movement、emissive triangle light、暖色 procedural area light 初期値を使います。
 - `Samples/Skinning`
   glTF 2.0 Cesium Man を読み込み、Joint Matrix の Constant Buffer を使った Vertex Shader Skinning / Compute Shader Skinning でアニメーション描画。
   Compute Shader Skinning 版は GPU 上の skinned vertex buffer に書き出してから描画します。
@@ -58,7 +60,7 @@ git submodule update --init --recursive
 
 ## スクリーンショット
 
-各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorClusteredForward` では Many Lights Forward と Clustered Forward の比較用 control / debug view に加えて directional shadow map の control / debug view を説明しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。`Samples/BistroExteriorPathtracing` では progressive path tracing、ReSTIR GI、ReSTIR DI 比較用 project、built-in denoiser control を説明しています。
+各サンプル README に、用意できているものは `docs/images` の Direct3D12 / Vulkan スクリーンショットを反映しています。`Samples/BistroExterior` では Vulkan DDS/BC 対応後の通常描画、ImGui の `Debug View` で切り替える Base Color、World Normal、Normal Texture Decoded、Shadow Map 系デバッグ表示の比較画像と、`Renderer Stats` オーバーレイも掲載しています。`Samples/BistroExteriorClusteredForward` では Many Lights Forward と Clustered Forward の比較用 control / debug view に加えて directional shadow map の control / debug view を説明しています。`Samples/BistroExteriorMeshShader` では Mesh Shader 版と shadow+culling 版の代表画像、および `Meshlet Color` デバッグ表示を掲載しています。`Samples/BistroExteriorRaytracing` では DXR / Vulkan Ray Tracing の variant と debug view を説明しています。`Samples/BistroExteriorPathtracing` では progressive path tracing、ReSTIR GI、ReSTIR DI 比較用 project、built-in denoiser control を説明しています。`Samples/BistroInteriorPathtracing` は現在、スクリーンショットなしで Interior path tracing setup を説明しています。
 
 ## 読み物 / 実装振り返り
 

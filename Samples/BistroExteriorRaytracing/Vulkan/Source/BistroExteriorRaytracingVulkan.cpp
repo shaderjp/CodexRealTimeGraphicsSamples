@@ -1,5 +1,7 @@
 #include "BistroExteriorRaytracingVulkan.h"
 
+#include "..\..\Common\BistroResolution.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "backends/imgui_impl_win32.h"
@@ -287,6 +289,99 @@ void BistroExteriorRaytracingVulkan::Render()
     }
 
     m_currentFrame = (m_currentFrame + 1) % MaxFramesInFlight;
+}
+
+void BistroExteriorRaytracingVulkan::SetOutputResolution(uint32_t width, uint32_t height)
+{
+    if (width == 0 || height == 0 || (m_swapChainExtent.width == width && m_swapChainExtent.height == height))
+    {
+        return;
+    }
+
+    Bistro::ResizeClientArea(m_hwnd, width, height);
+    RecreateSwapChain();
+}
+
+void BistroExteriorRaytracingVulkan::RecreateSwapChain()
+{
+    if (m_device == VK_NULL_HANDLE || m_swapChain == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    vkDeviceWaitIdle(m_device);
+
+    if (!m_commandBuffers.empty())
+    {
+        vkFreeCommandBuffers(m_device, m_commandPool, static_cast<uint32_t>(m_commandBuffers.size()), m_commandBuffers.data());
+        m_commandBuffers.clear();
+    }
+
+    for (VkFramebuffer framebuffer : m_framebuffers)
+    {
+        vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+    }
+    m_framebuffers.clear();
+
+    if (m_descriptorPool && m_descriptorSet)
+    {
+        VkDescriptorSet descriptorSets[] = { m_descriptorSet, m_textureDescriptorSet };
+        vkFreeDescriptorSets(m_device, m_descriptorPool, m_textureDescriptorSet ? 2u : 1u, descriptorSets);
+        m_descriptorSet = VK_NULL_HANDLE;
+        m_textureDescriptorSet = VK_NULL_HANDLE;
+    }
+
+    if (m_outputImageView)
+    {
+        vkDestroyImageView(m_device, m_outputImageView, nullptr);
+        m_outputImageView = VK_NULL_HANDLE;
+    }
+    if (m_outputImage)
+    {
+        vkDestroyImage(m_device, m_outputImage, nullptr);
+        m_outputImage = VK_NULL_HANDLE;
+    }
+    if (m_outputImageMemory)
+    {
+        vkFreeMemory(m_device, m_outputImageMemory, nullptr);
+        m_outputImageMemory = VK_NULL_HANDLE;
+    }
+    if (m_accumulationImageView)
+    {
+        vkDestroyImageView(m_device, m_accumulationImageView, nullptr);
+        m_accumulationImageView = VK_NULL_HANDLE;
+    }
+    if (m_accumulationImage)
+    {
+        vkDestroyImage(m_device, m_accumulationImage, nullptr);
+        m_accumulationImage = VK_NULL_HANDLE;
+    }
+    if (m_accumulationImageMemory)
+    {
+        vkFreeMemory(m_device, m_accumulationImageMemory, nullptr);
+        m_accumulationImageMemory = VK_NULL_HANDLE;
+    }
+
+    for (VkImageView imageView : m_swapChainImageViews)
+    {
+        vkDestroyImageView(m_device, imageView, nullptr);
+    }
+    m_swapChainImageViews.clear();
+    m_swapChainImages.clear();
+    m_swapChainImageInitialized.clear();
+
+    vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+    m_swapChain = VK_NULL_HANDLE;
+
+    CreateSwapChain();
+    m_width = m_swapChainExtent.width;
+    m_height = m_swapChainExtent.height;
+    CreateImageViews();
+    CreateFramebuffers();
+    CreateOutputImages();
+    CreateDescriptorSets();
+    CreateCommandBuffers();
+    ResetAccumulation();
 }
 
 void BistroExteriorRaytracingVulkan::WaitIdle()
@@ -1397,6 +1492,12 @@ void BistroExteriorRaytracingVulkan::BuildRendererStatsUI()
     ImGui::Text("API: Vulkan Ray Tracing");
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
+    uint32_t outputWidth = m_swapChainExtent.width;
+    uint32_t outputHeight = m_swapChainExtent.height;
+    if (Bistro::DrawResolutionCombo(m_swapChainExtent.width, m_swapChainExtent.height, outputWidth, outputHeight))
+    {
+        SetOutputResolution(outputWidth, outputHeight);
+    }
     ImGui::Separator();
     ImGui::Text("Materials: %zu", m_scene.materials.size());
     ImGui::Text("Textures: %zu", m_textures.size());

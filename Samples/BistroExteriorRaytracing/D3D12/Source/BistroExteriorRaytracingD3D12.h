@@ -196,6 +196,7 @@ private:
     void BuildAccelerationStructures();
     void CreateShaderTables();
     void PopulateCommandList();
+    void ResizeOutput(UINT width, UINT height);
     void DispatchRays();
     void CopyOutputToBackBuffer();
     void WaitForPreviousFrame();

@@ -127,6 +127,7 @@ private:
     void CreateBuffers();
     void CreateTextures();
     void PopulateCommandList();
+    void ResizeOutput(UINT width, UINT height);
     void WaitForPreviousFrame();
     void UpdateConstantBuffer(float deltaSeconds);
     void InitializeImGui();

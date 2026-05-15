@@ -5,6 +5,7 @@
 #include "backends/imgui_impl_dx12.h"
 #include "backends/imgui_impl_win32.h"
 #include "..\..\Common\BistroTexture.h"
+#include "..\..\Common\BistroResolution.h"
 
 #include <DirectXTex.h>
 
@@ -964,6 +965,12 @@ void BistroExteriorPathtracingD3D12::BuildRendererStatsUI()
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
     ImGui::Checkbox("VSync", &m_vsyncEnabled);
+    uint32_t outputWidth = m_width;
+    uint32_t outputHeight = m_height;
+    if (Bistro::DrawResolutionCombo(m_width, m_height, outputWidth, outputHeight))
+    {
+        ResizeOutput(outputWidth, outputHeight);
+    }
     ImGui::Text("Tearing: %s", m_tearingSupported ? "Supported" : "Unsupported");
     ImGui::Separator();
     ImGui::Text("Materials: %zu", m_scene.materials.size());
@@ -984,6 +991,47 @@ void BistroExteriorPathtracingD3D12::BuildRendererStatsUI()
     ImGui::Text("Mode: %s", PathtracingModeName(m_mode));
     ImGui::Text("Denoiser: %s (%d pass%s)", m_denoiserEnabled ? "On" : "Off", m_denoiserSpatialIterations, m_denoiserSpatialIterations == 1 ? "" : "es");
     ImGui::End();
+}
+
+void BistroExteriorPathtracingD3D12::ResizeOutput(UINT width, UINT height)
+{
+    if (width == 0 || height == 0 || !m_swapChain || (m_width == width && m_height == height))
+    {
+        return;
+    }
+
+    WaitForPreviousFrame();
+    for (ComPtr<ID3D12Resource>& renderTarget : m_renderTargets)
+    {
+        renderTarget.Reset();
+    }
+    m_PathtracingOutput.Reset();
+    m_accumulationOutput.Reset();
+    m_denoiseAov0.Reset();
+    m_denoiseAov1.Reset();
+    m_restirReservoirCurrent.Reset();
+    m_restirReservoirHistory.Reset();
+    m_restirReservoirSpatial.Reset();
+    m_width = width;
+    m_height = height;
+    m_aspectRatio = static_cast<float>(m_width) / static_cast<float>(m_height);
+    m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
+    m_scissorRect = CD3DX12_RECT(0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height));
+
+    ThrowIfFailed(m_swapChain->ResizeBuffers(FrameCount, m_width, m_height, BackBufferFormat, m_tearingSupported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0));
+    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+    for (UINT n = 0; n < FrameCount; ++n)
+    {
+        ThrowIfFailed(m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n])));
+        m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
+        rtvHandle.Offset(1, m_rtvDescriptorSize);
+    }
+
+    CreateOutputResources();
+    ResetAccumulation();
+    Bistro::ResizeClientArea(Win32Application::GetHwnd(), m_width, m_height);
 }
 
 void BistroExteriorPathtracingD3D12::OnKeyDown(UINT8 key)

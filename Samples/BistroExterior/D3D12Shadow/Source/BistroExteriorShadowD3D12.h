@@ -133,6 +133,7 @@ private:
     void CreateShadowResources();
     void CreateTextures();
     void PopulateCommandList();
+    void ResizeOutput(UINT width, UINT height);
     void DrawScene();
     void WaitForPreviousFrame();
     void UpdateConstantBuffer(float deltaSeconds);

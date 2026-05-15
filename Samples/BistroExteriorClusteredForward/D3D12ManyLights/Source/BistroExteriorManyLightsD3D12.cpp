@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "BistroExteriorManyLightsD3D12.h"
 #include "..\..\Common\BistroTexture.h"
+#include "..\..\Common\BistroResolution.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx12.h"
@@ -740,6 +741,55 @@ void BistroExteriorManyLightsD3D12::WaitForPreviousFrame()
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
+void BistroExteriorManyLightsD3D12::ResizeOutput(UINT width, UINT height)
+{
+    if (width == 0 || height == 0 || !m_swapChain || (m_width == width && m_height == height))
+    {
+        return;
+    }
+
+    WaitForPreviousFrame();
+    for (ComPtr<ID3D12Resource>& renderTarget : m_renderTargets)
+    {
+        renderTarget.Reset();
+    }
+    m_depthStencil.Reset();
+    m_clusterRecordsBuffer.Reset();
+    m_clusterLightIndicesBuffer.Reset();
+    m_clusterStatsBuffer.Reset();
+    m_clusterStatsReadback.Reset();
+    m_clusterRecordsState = D3D12_RESOURCE_STATE_COMMON;
+    m_clusterIndicesState = D3D12_RESOURCE_STATE_COMMON;
+    m_clusterStatsState = D3D12_RESOURCE_STATE_COMMON;
+    m_clusterStats = {};
+    m_width = width;
+    m_height = height;
+    m_aspectRatio = static_cast<float>(m_width) / static_cast<float>(m_height);
+    m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
+    m_scissorRect = CD3DX12_RECT(0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height));
+
+    ThrowIfFailed(m_swapChain->ResizeBuffers(FrameCount, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_tearingSupported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0));
+    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+    for (UINT n = 0; n < FrameCount; ++n)
+    {
+        ThrowIfFailed(m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n])));
+        m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
+        rtvHandle.Offset(1, m_rtvDescriptorSize);
+    }
+
+    D3D12_RESOURCE_DESC depthDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, m_width, m_height, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+    D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
+    depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
+    ThrowIfFailed(m_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &depthDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthOptimizedClearValue, IID_PPV_ARGS(&m_depthStencil)));
+    m_device->CreateDepthStencilView(m_depthStencil.Get(), nullptr, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+    CreateLightAndClusterBuffers();
+
+    Bistro::ResizeClientArea(Win32Application::GetHwnd(), m_width, m_height);
+}
+
 void BistroExteriorManyLightsD3D12::OnKeyDown(UINT8 key)
 {
     if (key == VK_ESCAPE)
@@ -964,6 +1014,13 @@ void BistroExteriorManyLightsD3D12::BuildRendererStatsUI()
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
     ImGui::Checkbox("VSync", &m_vsyncEnabled);
+    uint32_t outputWidth = m_width;
+    uint32_t outputHeight = m_height;
+    if (Bistro::DrawResolutionCombo(m_width, m_height, outputWidth, outputHeight))
+    {
+        ResizeOutput(outputWidth, outputHeight);
+    }
+    ImGui::Text("Output: %ux%u", m_width, m_height);
     ImGui::Text("Tearing: %s", m_tearingSupported ? "Supported" : "Unsupported");
     ImGui::Separator();
     ImGui::TextUnformatted("Scene");
@@ -1037,6 +1094,7 @@ void BistroExteriorManyLightsD3D12::ResetShadowSettings()
     m_shadowFocusDistance = 25.0f;
     m_shadowDepthRange = 160.0f;
 }
+
 void BistroExteriorManyLightsD3D12::AllocateImGuiDescriptor(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuHandle)
 {
     auto* sample = static_cast<BistroExteriorManyLightsD3D12*>(info->UserData);

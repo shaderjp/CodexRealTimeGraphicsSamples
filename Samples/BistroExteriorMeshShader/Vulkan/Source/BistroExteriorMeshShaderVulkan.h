@@ -116,6 +116,8 @@ private:
     void ShutdownImGui();
     void BuildUI();
     void BuildRendererStatsUI();
+    void SetOutputResolution(uint32_t width, uint32_t height);
+    void RecreateSwapChain();
     void ResetLight();
     void ResetCameraView();
     void ResetCameraSpeeds();

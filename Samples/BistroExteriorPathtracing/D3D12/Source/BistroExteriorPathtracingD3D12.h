@@ -251,6 +251,7 @@ private:
     void CreateRestirReusePipeline();
     void CreateDenoisePipeline();
     void PopulateCommandList();
+    void ResizeOutput(UINT width, UINT height);
     void DispatchRays();
     void RunRestirReusePass();
     void RunDenoisePass();
