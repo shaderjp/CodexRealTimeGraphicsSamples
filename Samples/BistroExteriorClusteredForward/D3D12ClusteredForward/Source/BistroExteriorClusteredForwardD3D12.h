@@ -168,6 +168,7 @@ private:
     void CreateShadowResources();
     void CreateLightAndClusterBuffers();
     void PopulateCommandList();
+    void ResizeOutput(UINT width, UINT height);
     void DrawScene();
     void DispatchClusterBuild();
     void ReadbackClusterStats();

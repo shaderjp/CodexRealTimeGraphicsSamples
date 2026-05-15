@@ -1,0 +1,64 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BistroInteriorPathtracing", "BistroInteriorPathtracing", "{4F041AFD-24DD-45C1-91B9-352640E150B7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingD3D12", "D3D12\Source\BistroInteriorPathtracingD3D12.vcxproj", "{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingVulkan", "Vulkan\Source\BistroInteriorPathtracingVulkan.vcxproj", "{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingReSTIRD3D12", "D3D12ReSTIR\Source\BistroInteriorPathtracingReSTIRD3D12.vcxproj", "{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingReSTIRVulkan", "VulkanReSTIR\Source\BistroInteriorPathtracingReSTIRVulkan.vcxproj", "{B404E4AD-B74A-444E-8119-956CEFCBC6D6}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingReSTIRDID3D12", "D3D12ReSTIRDI\Source\BistroInteriorPathtracingReSTIRDID3D12.vcxproj", "{8450B545-3E4C-4C54-838A-0AB63568B880}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroInteriorPathtracingReSTIRDIVulkan", "VulkanReSTIRDI\Source\BistroInteriorPathtracingReSTIRDIVulkan.vcxproj", "{BC77A1E9-C72F-4B0D-B07C-3F2103361404}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6}.Debug|x64.ActiveCfg = Debug|x64
+		{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6}.Debug|x64.Build.0 = Debug|x64
+		{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6}.Release|x64.ActiveCfg = Release|x64
+		{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6}.Release|x64.Build.0 = Release|x64
+		{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0}.Debug|x64.ActiveCfg = Debug|x64
+		{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0}.Debug|x64.Build.0 = Debug|x64
+		{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0}.Release|x64.ActiveCfg = Release|x64
+		{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0}.Release|x64.Build.0 = Release|x64
+		{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB}.Debug|x64.ActiveCfg = Debug|x64
+		{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB}.Debug|x64.Build.0 = Debug|x64
+		{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB}.Release|x64.ActiveCfg = Release|x64
+		{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB}.Release|x64.Build.0 = Release|x64
+		{B404E4AD-B74A-444E-8119-956CEFCBC6D6}.Debug|x64.ActiveCfg = Debug|x64
+		{B404E4AD-B74A-444E-8119-956CEFCBC6D6}.Debug|x64.Build.0 = Debug|x64
+		{B404E4AD-B74A-444E-8119-956CEFCBC6D6}.Release|x64.ActiveCfg = Release|x64
+		{B404E4AD-B74A-444E-8119-956CEFCBC6D6}.Release|x64.Build.0 = Release|x64
+		{8450B545-3E4C-4C54-838A-0AB63568B880}.Debug|x64.ActiveCfg = Debug|x64
+		{8450B545-3E4C-4C54-838A-0AB63568B880}.Debug|x64.Build.0 = Debug|x64
+		{8450B545-3E4C-4C54-838A-0AB63568B880}.Release|x64.ActiveCfg = Release|x64
+		{8450B545-3E4C-4C54-838A-0AB63568B880}.Release|x64.Build.0 = Release|x64
+		{BC77A1E9-C72F-4B0D-B07C-3F2103361404}.Debug|x64.ActiveCfg = Debug|x64
+		{BC77A1E9-C72F-4B0D-B07C-3F2103361404}.Debug|x64.Build.0 = Debug|x64
+		{BC77A1E9-C72F-4B0D-B07C-3F2103361404}.Release|x64.ActiveCfg = Release|x64
+		{BC77A1E9-C72F-4B0D-B07C-3F2103361404}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D5FF6F59-1596-4BE8-A6EF-79F4EE237BB6} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+		{3BAADC2A-CD93-44F5-9E92-3F7825AD25D0} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+		{61288E7C-D80C-4521-AEC3-C1D2BBAD0EFB} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+		{B404E4AD-B74A-444E-8119-956CEFCBC6D6} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+		{8450B545-3E4C-4C54-838A-0AB63568B880} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+		{BC77A1E9-C72F-4B0D-B07C-3F2103361404} = {4F041AFD-24DD-45C1-91B9-352640E150B7}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12AD43A1-8A73-4E75-B723-50352A3A981E}
+	EndGlobalSection
+EndGlobal

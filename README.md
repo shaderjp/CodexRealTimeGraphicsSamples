@@ -88,6 +88,14 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 - `Samples/BistroExteriorPathtracing/VulkanReSTIR/Source/BistroExteriorPathtracingReSTIRVulkan.vcxproj`
 - `Samples/BistroExteriorPathtracing/D3D12ReSTIRDI/Source/BistroExteriorPathtracingReSTIRDID3D12.vcxproj`
 - `Samples/BistroExteriorPathtracing/VulkanReSTIRDI/Source/BistroExteriorPathtracingReSTIRDIVulkan.vcxproj`
+- `Samples/BistroInteriorPathtracing/BistroInteriorPathtracing.sln`
+- `Samples/BistroInteriorPathtracing/README.md`
+- `Samples/BistroInteriorPathtracing/D3D12/Source/BistroInteriorPathtracingD3D12.vcxproj`
+- `Samples/BistroInteriorPathtracing/Vulkan/Source/BistroInteriorPathtracingVulkan.vcxproj`
+- `Samples/BistroInteriorPathtracing/D3D12ReSTIR/Source/BistroInteriorPathtracingReSTIRD3D12.vcxproj`
+- `Samples/BistroInteriorPathtracing/VulkanReSTIR/Source/BistroInteriorPathtracingReSTIRVulkan.vcxproj`
+- `Samples/BistroInteriorPathtracing/D3D12ReSTIRDI/Source/BistroInteriorPathtracingReSTIRDID3D12.vcxproj`
+- `Samples/BistroInteriorPathtracing/VulkanReSTIRDI/Source/BistroInteriorPathtracingReSTIRDIVulkan.vcxproj`
 - `Samples/Skinning/Skinning.sln`
 - `Samples/Skinning/README.md`
 - `Samples/Skinning/D3D12/Source/SkinningD3D12.vcxproj`
@@ -109,11 +117,13 @@ The sample folders each contain an API-neutral solution and side-by-side Direct3
 
 `Samples/BistroExteriorPathtracing` renders Bistro Exterior as a progressive path tracer through DXR and Vulkan Ray Tracing. It includes D3D12/Vulkan baseline path tracing projects plus ReSTIR GI and ReSTIR DI comparison projects with reservoir temporal/spatial reuse, procedural sky/sun next-event estimation, stochastic diffuse/specular bounces, alpha-tested visibility rays, accumulation controls, a built-in lightweight denoiser, and path-tracing debug views.
 
+`Samples/BistroInteriorPathtracing` renders Bistro Interior with the same progressive path tracing, ReSTIR GI / DI, and denoiser structure, while loading `BistroInterior.fbx` and using interior-focused camera, movement, emissive triangle, and warm procedural area-light defaults.
+
 `Samples/Skinning` loads the glTF 2.0 Cesium Man asset and renders animated vertex shader skinning or compute shader skinning with joint matrices. The compute variants write skinned vertices into a GPU buffer before the graphics pass.
 
 ## Screenshot Gallery
 
-Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorClusteredForward` documents the many-light and clustered-forward comparison controls, including directional shadow-map controls and debug views. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views. `Samples/BistroExteriorPathtracing` documents the progressive path tracing, ReSTIR GI, ReSTIR DI, and built-in denoiser controls.
+Each sample README includes Direct3D12 and Vulkan screenshots from `docs/images` where captures are available. `Samples/BistroExterior` also documents the corrected Vulkan DDS/BC texture path, the ImGui `Debug View` modes including Base Color, World Normal, Normal Texture Decoded, and shadow-map comparison captures, plus the `Renderer Stats` overlay. `Samples/BistroExteriorClusteredForward` documents the many-light and clustered-forward comparison controls, including directional shadow-map controls and debug views. `Samples/BistroExteriorMeshShader` includes representative Mesh Shader and shadow+culling captures, including `Meshlet Color` debug views. `Samples/BistroExteriorRaytracing` documents the DXR/Vulkan ray tracing variants and their debug views. `Samples/BistroExteriorPathtracing` documents the progressive path tracing, ReSTIR GI, ReSTIR DI, and built-in denoiser controls. `Samples/BistroInteriorPathtracing` currently documents the Interior path tracing setup without screenshot captures.
 
 ## Implementation Notes
 

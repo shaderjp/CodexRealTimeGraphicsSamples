@@ -1,5 +1,6 @@
 #include "BistroExteriorMeshShaderCullingVulkan.h"
 #include "..\..\Common\BistroTexture.h"
+#include "..\..\Common\BistroResolution.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -292,6 +293,85 @@ void BistroExteriorMeshShaderCullingVulkan::Render()
         ThrowIfFailed(presentResult, "Failed to present swapchain image.");
     }
     m_currentFrame = (m_currentFrame + 1) % MaxFramesInFlight;
+}
+
+void BistroExteriorMeshShaderCullingVulkan::SetOutputResolution(uint32_t width, uint32_t height)
+{
+    if (width == 0 || height == 0 || (m_swapChainExtent.width == width && m_swapChainExtent.height == height))
+    {
+        return;
+    }
+
+    Bistro::ResizeClientArea(m_hwnd, width, height);
+    RecreateSwapChain();
+}
+
+void BistroExteriorMeshShaderCullingVulkan::RecreateSwapChain()
+{
+    if (m_device == VK_NULL_HANDLE || m_swapChain == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    vkDeviceWaitIdle(m_device);
+
+    if (!m_commandBuffers.empty())
+    {
+        vkFreeCommandBuffers(m_device, m_commandPool, static_cast<uint32_t>(m_commandBuffers.size()), m_commandBuffers.data());
+        m_commandBuffers.clear();
+    }
+
+    for (VkFramebuffer framebuffer : m_framebuffers)
+    {
+        vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+    }
+    m_framebuffers.clear();
+
+    if (m_depthImageView)
+    {
+        vkDestroyImageView(m_device, m_depthImageView, nullptr);
+        m_depthImageView = VK_NULL_HANDLE;
+    }
+    if (m_depthImage)
+    {
+        vkDestroyImage(m_device, m_depthImage, nullptr);
+        m_depthImage = VK_NULL_HANDLE;
+    }
+    if (m_depthImageMemory)
+    {
+        vkFreeMemory(m_device, m_depthImageMemory, nullptr);
+        m_depthImageMemory = VK_NULL_HANDLE;
+    }
+
+    if (m_graphicsPipeline)
+    {
+        vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
+        m_graphicsPipeline = VK_NULL_HANDLE;
+    }
+    if (m_pipelineLayout)
+    {
+        vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+        m_pipelineLayout = VK_NULL_HANDLE;
+    }
+
+    for (VkImageView imageView : m_swapChainImageViews)
+    {
+        vkDestroyImageView(m_device, imageView, nullptr);
+    }
+    m_swapChainImageViews.clear();
+    m_swapChainImages.clear();
+
+    vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+    m_swapChain = VK_NULL_HANDLE;
+
+    CreateSwapChain();
+    m_width = m_swapChainExtent.width;
+    m_height = m_swapChainExtent.height;
+    CreateImageViews();
+    CreateGraphicsPipeline();
+    CreateDepthResources();
+    CreateFramebuffers();
+    CreateCommandBuffers();
 }
 
 void BistroExteriorMeshShaderCullingVulkan::WaitIdle()
@@ -1196,6 +1276,13 @@ void BistroExteriorMeshShaderCullingVulkan::BuildRendererStatsUI()
     ImGui::Text("API: Vulkan");
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Frame Time: %.3f ms", frameTimeMs);
+    uint32_t outputWidth = m_swapChainExtent.width;
+    uint32_t outputHeight = m_swapChainExtent.height;
+    if (Bistro::DrawResolutionCombo(m_swapChainExtent.width, m_swapChainExtent.height, outputWidth, outputHeight))
+    {
+        SetOutputResolution(outputWidth, outputHeight);
+    }
+    ImGui::Text("Output: %ux%u", m_swapChainExtent.width, m_swapChainExtent.height);
     ImGui::Separator();
     ImGui::TextUnformatted("Scene");
     ImGui::Text("Materials: %zu", m_scene.materials.size());
