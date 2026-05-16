@@ -126,6 +126,13 @@ struct EnhancedGBuffer
     float4 normalRoughness;
     uint4 materialAndFlags;
 };
+
+struct EnhancedReplayResult
+{
+    float4 radianceTarget;
+    float4 metrics;
+    uint4 flags;
+};
 #endif
 
 struct RtLight
@@ -919,6 +926,54 @@ float3 TracePathSample(uint2 pixel, uint sampleIndex, bool useRussianRoulette, o
     return ClampRadiance(radiance);
 }
 
+#if PT_RESTIR_PT_ENHANCED
+EnhancedReplayResult EmptyEnhancedReplayResult()
+{
+    EnhancedReplayResult result;
+    result.radianceTarget = 0.0f.xxxx;
+    result.metrics = 0.0f.xxxx;
+    result.flags = 0u.xxxx;
+    return result;
+}
+
+EnhancedReplayResult ReplayPathSample(uint2 pixel, RestirReservoir reservoir)
+{
+    EnhancedReplayResult result = EmptyEnhancedReplayResult();
+    if (reservoir.meta.w <= 0.5f)
+    {
+        return result;
+    }
+
+    RayPayload replayFirstHit;
+    float3 replayDirectNee;
+    float3 replayIndirect;
+    uint replayBounceCount;
+    float3 replayRadiance = TracePathSample(pixel, reservoir.pathSeedsAndFlags.x, false, replayFirstHit, replayDirectNee, replayIndirect, replayBounceCount);
+    float replayTarget = RestirTarget(replayRadiance);
+    float sourceTarget = max(asfloat(reservoir.reconnectData.z), 0.0001f);
+
+    bool storedHit = (reservoir.pathSeedsAndFlags.z & 0xffu) != 0u;
+    bool replayHit = replayFirstHit.hit != 0u;
+    bool hitValid = storedHit == replayHit;
+
+    float storedHitT = asfloat(reservoir.reconnectData.x);
+    float hitError = storedHit ? abs(replayFirstHit.hitT - storedHitT) : 0.0f;
+    float hitTolerance = max(max(g_scene.restirEnhancedOptions1.y, 0.001f) * max(max(storedHitT, replayFirstHit.hitT), 0.001f), 0.02f);
+    bool depthValid = !storedHit || hitError <= hitTolerance;
+
+    float storedRoughness = asfloat(reservoir.reconnectData.y);
+    float roughnessError = storedHit ? abs(replayFirstHit.roughness - storedRoughness) : 0.0f;
+    bool roughnessValid = !storedHit || roughnessError <= 0.08f;
+    bool radianceValid = replayTarget > 0.0001f;
+    bool valid = hitValid && depthValid && roughnessValid && radianceValid;
+
+    result.radianceTarget = float4(replayRadiance, replayTarget);
+    result.metrics = float4(sourceTarget, replayTarget / sourceTarget, hitError / hitTolerance, roughnessError);
+    result.flags = uint4(valid ? 1u : 0u, hitValid ? 1u : 0u, depthValid ? 1u : 0u, roughnessValid ? 1u : 0u);
+    return result;
+}
+#endif
+
 [shader("raygeneration")]
 void RayGen()
 {
@@ -1124,7 +1179,7 @@ void RayGen()
     RestirReservoir reservoir = MakeRestirReservoir(selectedColor, totalSamples);
     reservoir.radianceWeight.w = max(selectedWeightSum / (float)max(totalSamples, 1u), reservoir.radianceWeight.w);
     reservoir.pathSeedsAndFlags = uint4(enhancedSeed, enhancedReplaySeed, selectedFirstHit.hit | (selectedBounceCount << 8u), selectedBounceCount);
-    reservoir.reconnectData = uint4(asuint(selectedFirstHit.hitT), asuint(selectedFirstHit.roughness), asuint(Luminance(selectedDirectNee + selectedIndirect)), 0u);
+    reservoir.reconnectData = uint4(asuint(selectedFirstHit.hitT), asuint(selectedFirstHit.roughness), asuint(RestirTarget(selectedColor)), 0u);
     EnhancedGBuffer currentGBuffer = MakeEnhancedGBuffer(selectedFirstHit);
     g_enhancedGBufferCurrent[enhancedPixelIndex] = currentGBuffer;
     int2 enhancedHistoryPixel = int2(pixel);
@@ -1218,6 +1273,12 @@ void RayGen()
     g_restirCurrent[enhancedPixelIndex] = reservoir;
     uint replayNeeded = enhancedReplayCompaction && reservoir.meta.w > 0.5f && (reservoir.meta.y > 0.5f || reservoir.meta.z > 0.5f) ? 1u : 0u;
     g_enhancedReplayTasks[enhancedPixelIndex] = uint4(replayNeeded, pixel.x, pixel.y, reservoir.pathSeedsAndFlags.z);
+    bool replayDebugView = debugMode >= 22u && debugMode <= 24u;
+    EnhancedReplayResult replayDebug = EmptyEnhancedReplayResult();
+    if (replayDebugView)
+    {
+        replayDebug = ReplayPathSample(pixel, reservoir);
+    }
 
     if (debugMode == 0u) debugColor = color;
     if (debugMode == 13u || debugMode == 16u) debugColor = saturate(reservoir.radianceWeight.w / max(g_scene.restirOptions.w, 0.001f)).xxx;
@@ -1226,6 +1287,9 @@ void RayGen()
     if (debugMode == 19u) debugColor = saturate(reservoir.meta.z / 3.0f).xxx;
     if (debugMode == 20u) debugColor = duplicationScore.xxx;
     if (debugMode == 21u) debugColor = replayNeeded.xxx;
+    if (debugMode == 22u) debugColor = replayDebug.flags.x > 0u ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, replayDebug.flags.y > 0u ? 0.5f : 0.0f, replayDebug.flags.z > 0u ? 0.5f : 0.0f);
+    if (debugMode == 23u) debugColor = replayDebug.radianceTarget.rgb;
+    if (debugMode == 24u) debugColor = float3(saturate(replayDebug.metrics.y), replayDebug.flags.x > 0u ? 1.0f : 0.0f, saturate(abs(log2(max(replayDebug.metrics.y, 0.0001f))) / 4.0f));
 #endif
 
     if (debugMode == 0u)

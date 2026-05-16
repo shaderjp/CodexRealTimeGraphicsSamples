@@ -1948,7 +1948,8 @@ void BistroExteriorPathtracingVulkan::BuildUI()
         "Final", "Base Color", "World Normal", "Normal Texture", "Roughness", "Metallic", "Emissive",
         "Hit Distance", "Direct NEE", "Indirect", "Bounce Count", "Accumulation Samples", "Sky",
         "Reservoir Weight", "Temporal Reuse", "Spatial Reuse", "Enhanced Reservoir", "Enhanced Path Depth",
-        "Enhanced Reconnection", "Enhanced Paired Spatial", "Enhanced Duplication", "Enhanced Replay Tasks"
+        "Enhanced Reconnection", "Enhanced Paired Spatial", "Enhanced Duplication", "Enhanced Replay Tasks",
+        "Enhanced Replay Valid", "Enhanced Replay Radiance", "Enhanced Replay Ratio"
     };
     if (ImGui::Combo("Debug View", &m_debugViewMode, debugModes, _countof(debugModes))) ResetAccumulation();
     if (ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip)) ResetAccumulation();
