@@ -236,6 +236,7 @@ private:
     bool m_enhancedColorReuse = true;
     bool m_enhancedRussianRoulette = true;
     bool m_enhancedReplayCompaction = true;
+    bool m_enhancedForcedNeeReconnection = true;
     float m_enhancedFootprintC = 0.02f;
     float m_enhancedRoughnessAlphaMin = 0.2f;
     int m_enhancedPrimaryRisCandidates = 32;

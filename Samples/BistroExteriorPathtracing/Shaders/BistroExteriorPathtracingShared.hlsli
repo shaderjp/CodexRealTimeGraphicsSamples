@@ -130,8 +130,10 @@ struct EnhancedGBuffer
 struct EnhancedReplayResult
 {
     float4 radianceTarget;
+    float4 forcedNee;
     float4 metrics;
     uint4 flags;
+    uint4 debugFlags;
 };
 #endif
 
@@ -728,18 +730,18 @@ uint SelectLightIndex(float sample, uint lightCount)
     return min(low, lightCount - 1u);
 }
 
-float3 EvaluateAreaLightNEE(SurfaceData surface, float3 viewDirection, inout uint rngState)
+float3 EvaluateAreaLightSampleNEE(SurfaceData surface, float3 viewDirection, float lightSample, float2 uv, out uint sampledLightIndex)
 {
+    sampledLightIndex = 0u;
     uint lightCount = (uint)round(g_scene.lightOptions.x);
     if (lightCount == 0u)
     {
         return 0.0f.xxx;
     }
 
-    float lightSample = Random01(rngState);
     uint lightIndex = SelectLightIndex(lightSample, lightCount);
+    sampledLightIndex = lightIndex;
     RtLight light = g_lights[lightIndex];
-    float2 uv = Random2(rngState);
     float3 edge0 = light.edge0Type.xyz;
     float3 edge1 = light.edge1.xyz;
     float3 lightPosition = light.positionArea.xyz + edge0 * uv.x + edge1 * uv.y;
@@ -774,6 +776,42 @@ float3 EvaluateAreaLightNEE(SurfaceData surface, float3 viewDirection, inout uin
     float3 radiance = light.radianceCdf.rgb * intensity;
     return EvaluateBsdf(surface, viewDirection, lightDirection) * radiance * visibility / solidAnglePdf;
 }
+
+float3 EvaluateAreaLightNEE(SurfaceData surface, float3 viewDirection, inout uint rngState)
+{
+    uint sampledLightIndex;
+    return EvaluateAreaLightSampleNEE(surface, viewDirection, Random01(rngState), Random2(rngState), sampledLightIndex);
+}
+
+#if PT_RESTIR_PT_ENHANCED
+float3 EvaluateForcedNeeReconnection(SurfaceData surface, float3 viewDirection, inout uint rngState, out uint forcedFlags)
+{
+    forcedFlags = 1u;
+    bool sunEnabled = g_scene.debugOptions.z > 0.5f;
+    uint lightCount = (uint)round(g_scene.lightOptions.x);
+    float choose = Random01(rngState);
+
+    if (sunEnabled && (choose < 0.5f || lightCount == 0u))
+    {
+        forcedFlags |= 2u;
+        float3 contribution = EvaluateSunNEE(surface, viewDirection);
+        forcedFlags |= RestirTarget(contribution) > 0.0001f ? 8u : 16u;
+        return contribution;
+    }
+
+    if (lightCount > 0u)
+    {
+        forcedFlags |= 4u;
+        uint sampledLightIndex;
+        float3 contribution = EvaluateAreaLightSampleNEE(surface, viewDirection, Random01(rngState), Random2(rngState), sampledLightIndex);
+        forcedFlags |= RestirTarget(contribution) > 0.0001f ? 8u : 16u;
+        return contribution;
+    }
+
+    forcedFlags |= 32u;
+    return 0.0f.xxx;
+}
+#endif
 
 RayPayload EmptyPayload()
 {
@@ -931,8 +969,10 @@ EnhancedReplayResult EmptyEnhancedReplayResult()
 {
     EnhancedReplayResult result;
     result.radianceTarget = 0.0f.xxxx;
+    result.forcedNee = 0.0f.xxxx;
     result.metrics = 0.0f.xxxx;
     result.flags = 0u.xxxx;
+    result.debugFlags = 0u.xxxx;
     return result;
 }
 
@@ -967,9 +1007,32 @@ EnhancedReplayResult ReplayPathSample(uint2 pixel, RestirReservoir reservoir)
     bool radianceValid = replayTarget > 0.0001f;
     bool valid = hitValid && depthValid && roughnessValid && radianceValid;
 
-    result.radianceTarget = float4(replayRadiance, replayTarget);
-    result.metrics = float4(sourceTarget, replayTarget / sourceTarget, hitError / hitTolerance, roughnessError);
+    uint forcedFlags = 0u;
+    float3 forcedNee = 0.0f.xxx;
+    if (g_scene.restirEnhancedOptions2.x > 0.5f)
+    {
+        forcedFlags = 1u;
+        if (valid && replayHit)
+        {
+            SurfaceData replaySurface = SurfaceFromPayload(replayFirstHit);
+            replaySurface.normal = replayFirstHit.normal;
+            float3 viewDirection = normalize(g_scene.cameraPosition.xyz - replaySurface.position);
+            uint forcedState = Hash(reservoir.pathSeedsAndFlags.y ^ pixel.x * 2246822519u ^ pixel.y * 3266489917u ^ 0x4f1bbcddu);
+            forcedNee = EvaluateForcedNeeReconnection(replaySurface, viewDirection, forcedState, forcedFlags);
+        }
+        else
+        {
+            forcedFlags |= 32u;
+        }
+    }
+
+    float3 shiftedRadiance = replayRadiance + forcedNee;
+    float shiftedTarget = RestirTarget(shiftedRadiance);
+    result.radianceTarget = float4(shiftedRadiance, shiftedTarget);
+    result.forcedNee = float4(forcedNee, RestirTarget(forcedNee));
+    result.metrics = float4(sourceTarget, shiftedTarget / sourceTarget, hitError / hitTolerance, roughnessError);
     result.flags = uint4(valid ? 1u : 0u, hitValid ? 1u : 0u, depthValid ? 1u : 0u, roughnessValid ? 1u : 0u);
+    result.debugFlags = uint4(forcedFlags, 0u, 0u, 0u);
     return result;
 }
 
@@ -996,6 +1059,7 @@ bool ReplayShiftCandidate(uint2 pixel, inout RestirReservoir candidate, out Enha
     candidate.radianceWeight.rgb = replay.radianceTarget.rgb;
     candidate.radianceWeight.w = min(candidate.radianceWeight.w * targetRatio, max(g_scene.restirOptions.w, 0.001f));
     candidate.reconnectData.z = asuint(replay.radianceTarget.w);
+    candidate.reconnectData.w = (candidate.reconnectData.w & 0xffu) | ((replay.debugFlags.x & 0x00ffffffu) << 8u);
     return candidate.radianceWeight.w > 0.0f;
 }
 #endif
@@ -1204,6 +1268,8 @@ void RayGen()
     bool enhancedSpatialRejected = false;
     bool enhancedReplayRejected = false;
     bool enhancedReplayAccepted = false;
+    bool enhancedForcedNeeRejected = false;
+    bool enhancedForcedNeeAccepted = false;
     uint enhancedSeed = selectedSampleIndex;
     uint enhancedReplaySeed = Hash(pixel.x * 9781u ^ pixel.y * 6271u ^ frameCounter * 104729u ^ 0x9e21f4u);
     RestirReservoir reservoir = MakeRestirReservoir(selectedColor, totalSamples);
@@ -1242,6 +1308,9 @@ void RayGen()
             bool historyReplayValid = ReplayShiftCandidate(pixel, history, historyReplay, historyRejectReason);
             if (historyReplayValid)
             {
+                uint forcedFlags = historyReplay.debugFlags.x;
+                enhancedForcedNeeAccepted = enhancedForcedNeeAccepted || ((forcedFlags & 8u) != 0u);
+                enhancedForcedNeeRejected = enhancedForcedNeeRejected || ((forcedFlags & 1u) != 0u && (forcedFlags & 8u) == 0u);
                 float historyM = max(history.meta.x, 1.0f);
                 float mis = PairwiseMisWeight(history.radianceWeight.w, reservoir.radianceWeight.w);
                 history.radianceWeight.w *= (min(historyM, temporalCap) / historyM) * mis;
@@ -1292,6 +1361,9 @@ void RayGen()
                 EnhancedReplayResult neighborReplay;
                 uint neighborRejectReason;
                 acceptNeighbor = ReplayShiftCandidate(pixel, neighbor, neighborReplay, neighborRejectReason);
+                uint forcedFlags = neighborReplay.debugFlags.x;
+                enhancedForcedNeeAccepted = enhancedForcedNeeAccepted || ((forcedFlags & 8u) != 0u);
+                enhancedForcedNeeRejected = enhancedForcedNeeRejected || ((forcedFlags & 1u) != 0u && (forcedFlags & 8u) == 0u);
                 enhancedReplayRejected = enhancedReplayRejected || (!acceptNeighbor && neighborRejectReason > 1u);
                 enhancedReplayAccepted = enhancedReplayAccepted || acceptNeighbor;
             }
@@ -1335,14 +1407,14 @@ void RayGen()
             }
         }
         duplicationScore = saturate((float)duplicateCount / 288.0f);
-        reservoir.reconnectData.w = (uint)round(duplicationScore * 255.0f);
+        reservoir.reconnectData.w = (reservoir.reconnectData.w & 0xffffff00u) | ((uint)round(duplicationScore * 255.0f) & 0xffu);
     }
     g_enhancedDuplicationCurrent[enhancedPixelIndex] = (uint)round(duplicationScore * 255.0f);
 
     g_restirCurrent[enhancedPixelIndex] = reservoir;
     uint replayNeeded = enhancedReplayCompaction && reservoir.meta.w > 0.5f && (reservoir.meta.y > 0.5f || reservoir.meta.z > 0.5f) ? 1u : 0u;
     g_enhancedReplayTasks[enhancedPixelIndex] = uint4(replayNeeded, pixel.x, pixel.y, reservoir.pathSeedsAndFlags.z);
-    bool replayDebugView = debugMode >= 22u && debugMode <= 24u;
+    bool replayDebugView = debugMode >= 22u && debugMode <= 25u;
     EnhancedReplayResult replayDebug = EmptyEnhancedReplayResult();
     if (replayDebugView)
     {
@@ -1352,13 +1424,14 @@ void RayGen()
     if (debugMode == 0u) debugColor = color;
     if (debugMode == 13u || debugMode == 16u) debugColor = saturate(reservoir.radianceWeight.w / max(g_scene.restirOptions.w, 0.001f)).xxx;
     if (debugMode == 17u) debugColor = saturate((float)reservoir.pathSeedsAndFlags.w / max(g_scene.pathOptions.x, 1.0f)).xxx;
-    if (debugMode == 18u) debugColor = float3(enhancedTemporalRejected ? 1.0f : (reservoir.meta.y > 0.5f ? 0.25f : 0.0f), enhancedSpatialRejected ? 1.0f : (reservoir.meta.z > 0.5f ? 0.25f : 0.0f), enhancedReplayRejected ? 1.0f : (enhancedReplayAccepted ? 0.25f : 0.0f));
+    if (debugMode == 18u) debugColor = float3(enhancedTemporalRejected ? 1.0f : (reservoir.meta.y > 0.5f ? 0.25f : 0.0f), enhancedSpatialRejected ? 1.0f : (reservoir.meta.z > 0.5f ? 0.25f : 0.0f), enhancedForcedNeeRejected ? 1.0f : (enhancedForcedNeeAccepted ? 0.25f : (enhancedReplayRejected ? 0.5f : 0.0f)));
     if (debugMode == 19u) debugColor = saturate(reservoir.meta.z / 3.0f).xxx;
     if (debugMode == 20u) debugColor = duplicationScore.xxx;
     if (debugMode == 21u) debugColor = replayNeeded.xxx;
     if (debugMode == 22u) debugColor = replayDebug.flags.x > 0u ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, replayDebug.flags.y > 0u ? 0.5f : 0.0f, replayDebug.flags.z > 0u ? 0.5f : 0.0f);
     if (debugMode == 23u) debugColor = replayDebug.radianceTarget.rgb;
     if (debugMode == 24u) debugColor = float3(saturate(replayDebug.metrics.y), replayDebug.flags.x > 0u ? 1.0f : 0.0f, saturate(abs(log2(max(replayDebug.metrics.y, 0.0001f))) / 4.0f));
+    if (debugMode == 25u) debugColor = replayDebug.forcedNee.rgb;
 #endif
 
     if (debugMode == 0u)

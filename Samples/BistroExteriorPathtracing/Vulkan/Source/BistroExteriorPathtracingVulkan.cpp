@@ -1949,7 +1949,7 @@ void BistroExteriorPathtracingVulkan::BuildUI()
         "Hit Distance", "Direct NEE", "Indirect", "Bounce Count", "Accumulation Samples", "Sky",
         "Reservoir Weight", "Temporal Reuse", "Spatial Reuse", "Enhanced Reservoir", "Enhanced Path Depth",
         "Enhanced Reconnection", "Enhanced Paired Spatial", "Enhanced Duplication", "Enhanced Replay Tasks",
-        "Enhanced Replay Valid", "Enhanced Replay Radiance", "Enhanced Replay Ratio"
+        "Enhanced Replay Valid", "Enhanced Replay Radiance", "Enhanced Replay Ratio", "Enhanced Forced NEE"
     };
     if (ImGui::Combo("Debug View", &m_debugViewMode, debugModes, _countof(debugModes))) ResetAccumulation();
     if (ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip)) ResetAccumulation();
@@ -2007,6 +2007,7 @@ void BistroExteriorPathtracingVulkan::BuildUI()
             if (ImGui::Checkbox("Vector Color Reuse", &m_enhancedColorReuse)) ResetAccumulation();
             if (ImGui::Checkbox("Initial Russian Roulette", &m_enhancedRussianRoulette)) ResetAccumulation();
             if (ImGui::Checkbox("Replay Compaction", &m_enhancedReplayCompaction)) ResetAccumulation();
+            if (ImGui::Checkbox("Forced NEE Reconnection", &m_enhancedForcedNeeReconnection)) ResetAccumulation();
             if (ImGui::SliderFloat("Footprint C", &m_enhancedFootprintC, 0.001f, 0.08f, "%.3f")) ResetAccumulation();
             if (ImGui::SliderFloat("Roughness Alpha Min", &m_enhancedRoughnessAlphaMin, 0.02f, 0.8f, "%.2f")) ResetAccumulation();
             if (ImGui::SliderInt("Primary RIS Candidates", &m_enhancedPrimaryRisCandidates, 1, 32)) ResetAccumulation();
@@ -2185,7 +2186,7 @@ void BistroExteriorPathtracingVulkan::UpdateUniformBuffer(float)
     constants.denoiseOptions2 = DirectX::XMFLOAT4(m_denoiserLuminanceSigma, m_denoiserAlbedoSigma, m_denoiserStrength, 0.0f);
     constants.restirEnhancedOptions0 = DirectX::XMFLOAT4(m_enhancedPairedSpatial ? 1.0f : 0.0f, m_enhancedDuplicationDecorrelate ? 1.0f : 0.0f, m_enhancedColorReuse ? 1.0f : 0.0f, m_enhancedRussianRoulette ? 1.0f : 0.0f);
     constants.restirEnhancedOptions1 = DirectX::XMFLOAT4(m_enhancedReplayCompaction ? 1.0f : 0.0f, m_enhancedFootprintC, m_enhancedRoughnessAlphaMin, static_cast<float>(m_enhancedPrimaryRisCandidates));
-    constants.restirEnhancedOptions2 = DirectX::XMFLOAT4(0.0f, m_enhancedTemporalCapDefault, m_enhancedTemporalCapMin, m_enhancedDuplicationAlpha);
+    constants.restirEnhancedOptions2 = DirectX::XMFLOAT4(m_enhancedForcedNeeReconnection ? 1.0f : 0.0f, m_enhancedTemporalCapDefault, m_enhancedTemporalCapMin, m_enhancedDuplicationAlpha);
     constants.previousViewProjection = m_previousViewProjection;
 
     void* mapped = nullptr;
