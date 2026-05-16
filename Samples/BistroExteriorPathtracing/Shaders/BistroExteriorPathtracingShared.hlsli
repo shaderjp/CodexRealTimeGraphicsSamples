@@ -972,6 +972,32 @@ EnhancedReplayResult ReplayPathSample(uint2 pixel, RestirReservoir reservoir)
     result.flags = uint4(valid ? 1u : 0u, hitValid ? 1u : 0u, depthValid ? 1u : 0u, roughnessValid ? 1u : 0u);
     return result;
 }
+
+bool ReplayShiftCandidate(uint2 pixel, inout RestirReservoir candidate, out EnhancedReplayResult replay, out uint rejectReason)
+{
+    replay = EmptyEnhancedReplayResult();
+    rejectReason = 0u;
+    if (candidate.meta.w <= 0.5f || candidate.radianceWeight.w <= 0.0f)
+    {
+        rejectReason = 1u;
+        candidate.radianceWeight.w = 0.0f;
+        return false;
+    }
+
+    replay = ReplayPathSample(pixel, candidate);
+    if (replay.flags.x == 0u)
+    {
+        rejectReason = replay.flags.y == 0u ? 2u : (replay.flags.z == 0u ? 3u : (replay.flags.w == 0u ? 4u : 5u));
+        candidate.radianceWeight.w = 0.0f;
+        return false;
+    }
+
+    float targetRatio = clamp(replay.metrics.y, 0.05f, 8.0f);
+    candidate.radianceWeight.rgb = replay.radianceTarget.rgb;
+    candidate.radianceWeight.w = min(candidate.radianceWeight.w * targetRatio, max(g_scene.restirOptions.w, 0.001f));
+    candidate.reconnectData.z = asuint(replay.radianceTarget.w);
+    return candidate.radianceWeight.w > 0.0f;
+}
 #endif
 
 [shader("raygeneration")]
@@ -1174,6 +1200,10 @@ void RayGen()
     float enhancedDefaultCap = max(g_scene.restirEnhancedOptions2.y, 1.0f);
     float enhancedMinCap = max(g_scene.restirEnhancedOptions2.z, 1.0f);
     float enhancedDuplicationAlpha = max(g_scene.restirEnhancedOptions2.w, 0.001f);
+    bool enhancedTemporalRejected = false;
+    bool enhancedSpatialRejected = false;
+    bool enhancedReplayRejected = false;
+    bool enhancedReplayAccepted = false;
     uint enhancedSeed = selectedSampleIndex;
     uint enhancedReplaySeed = Hash(pixel.x * 9781u ^ pixel.y * 6271u ^ frameCounter * 104729u ^ 0x9e21f4u);
     RestirReservoir reservoir = MakeRestirReservoir(selectedColor, totalSamples);
@@ -1202,14 +1232,33 @@ void RayGen()
         temporalCap = lerp(enhancedDefaultCap, enhancedMinCap, pow(saturate(priorDuplication), enhancedDuplicationAlpha));
     }
 
-    if (accumulatedFrames > 0u && g_scene.restirOptions.x > 0.5f && enhancedHistoryValid)
+    if (accumulatedFrames > 0u && g_scene.restirOptions.x > 0.5f)
     {
-        RestirReservoir history = LoadRestirHistory(enhancedHistoryPixel, enhancedDimensions);
-        float historyM = max(history.meta.x, 1.0f);
-        float mis = PairwiseMisWeight(history.radianceWeight.w, reservoir.radianceWeight.w);
-        history.radianceWeight.w *= (min(historyM, temporalCap) / historyM) * mis;
-        CombineRestirReservoir(reservoir, history);
-        reservoir.meta.y = max(reservoir.meta.y, history.meta.w);
+        if (enhancedHistoryValid)
+        {
+            RestirReservoir history = LoadRestirHistory(enhancedHistoryPixel, enhancedDimensions);
+            EnhancedReplayResult historyReplay;
+            uint historyRejectReason;
+            bool historyReplayValid = ReplayShiftCandidate(pixel, history, historyReplay, historyRejectReason);
+            if (historyReplayValid)
+            {
+                float historyM = max(history.meta.x, 1.0f);
+                float mis = PairwiseMisWeight(history.radianceWeight.w, reservoir.radianceWeight.w);
+                history.radianceWeight.w *= (min(historyM, temporalCap) / historyM) * mis;
+                CombineRestirReservoir(reservoir, history);
+                reservoir.meta.y = max(reservoir.meta.y, history.meta.w);
+                enhancedReplayAccepted = true;
+            }
+            else
+            {
+                enhancedTemporalRejected = true;
+                enhancedReplayRejected = historyRejectReason > 1u;
+            }
+        }
+        else
+        {
+            enhancedTemporalRejected = true;
+        }
     }
 
     if (accumulatedFrames > 0u && enhancedSpatialPasses > 0u)
@@ -1238,9 +1287,29 @@ void RayGen()
             RestirReservoir neighbor = LoadRestirHistory(int2(pixel) + offset, enhancedDimensions);
             EnhancedGBuffer neighborGBuffer = LoadEnhancedGBufferHistory(int2(pixel) + offset, enhancedDimensions);
             bool acceptNeighbor = ValidateEnhancedHistory(currentGBuffer, neighborGBuffer, enhancedFootprintC, enhancedAlphaMin);
-            neighbor.radianceWeight.w *= acceptNeighbor ? (enhancedColorReuse ? 0.65f : 0.5f) : 0.0f;
-            CombineRestirReservoir(reservoir, neighbor);
-            reservoir.meta.z += acceptNeighbor ? neighbor.meta.w : 0.0f;
+            if (acceptNeighbor)
+            {
+                EnhancedReplayResult neighborReplay;
+                uint neighborRejectReason;
+                acceptNeighbor = ReplayShiftCandidate(pixel, neighbor, neighborReplay, neighborRejectReason);
+                enhancedReplayRejected = enhancedReplayRejected || (!acceptNeighbor && neighborRejectReason > 1u);
+                enhancedReplayAccepted = enhancedReplayAccepted || acceptNeighbor;
+            }
+            else
+            {
+                enhancedSpatialRejected = true;
+            }
+
+            if (acceptNeighbor)
+            {
+                neighbor.radianceWeight.w *= enhancedColorReuse ? 0.65f : 0.5f;
+                CombineRestirReservoir(reservoir, neighbor);
+                reservoir.meta.z += neighbor.meta.w;
+            }
+            else
+            {
+                enhancedSpatialRejected = true;
+            }
         }
     }
 
@@ -1283,7 +1352,7 @@ void RayGen()
     if (debugMode == 0u) debugColor = color;
     if (debugMode == 13u || debugMode == 16u) debugColor = saturate(reservoir.radianceWeight.w / max(g_scene.restirOptions.w, 0.001f)).xxx;
     if (debugMode == 17u) debugColor = saturate((float)reservoir.pathSeedsAndFlags.w / max(g_scene.pathOptions.x, 1.0f)).xxx;
-    if (debugMode == 18u) debugColor = float3(enhancedHistoryValid ? 1.0f : 0.0f, reservoir.meta.z > 0.5f, reservoir.meta.w > 0.5f);
+    if (debugMode == 18u) debugColor = float3(enhancedTemporalRejected ? 1.0f : (reservoir.meta.y > 0.5f ? 0.25f : 0.0f), enhancedSpatialRejected ? 1.0f : (reservoir.meta.z > 0.5f ? 0.25f : 0.0f), enhancedReplayRejected ? 1.0f : (enhancedReplayAccepted ? 0.25f : 0.0f));
     if (debugMode == 19u) debugColor = saturate(reservoir.meta.z / 3.0f).xxx;
     if (debugMode == 20u) debugColor = duplicationScore.xxx;
     if (debugMode == 21u) debugColor = replayNeeded.xxx;

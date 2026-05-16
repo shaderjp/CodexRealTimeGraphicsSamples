@@ -59,7 +59,7 @@ ReSTIR プロジェクトは、通常の path tracing baseline、ReSTIR GI、ReS
 
 このサンプルでは、production 向けの visibility validation や disocclusion test までは入れず、reservoir reuse、debug visibility、D3D12 / Vulkan で対応する resource flow を小さく確認できる形にしています。
 
-ReSTIR PT Enhanced 版は通常版、既存 ReSTIR GI、既存 ReSTIR DI に影響しない D3D12 / Vulkan の別 executable です。現在の実装では compressed selected-path reservoir、Enhanced 専用 current/history GBuffer、primary-hit の position/normal/material による temporal / spatial history validation、CPU 生成の paired spatial reuse offset table 3 枚、temporal cap を下げる duplication map、Reservoir / Path Depth / Reconnection / Temporal / Paired Spatial / Duplication / Replay Tasks / Replay Validation の debug view を追加しています。
+ReSTIR PT Enhanced 版は通常版、既存 ReSTIR GI、既存 ReSTIR DI に影響しない D3D12 / Vulkan の別 executable です。現在の実装では compressed selected-path reservoir、Enhanced 専用 current/history GBuffer、primary-hit の position/normal/material による temporal / spatial history validation、temporal / spatial reuse candidate の replay validation、CPU 生成の paired spatial reuse offset table 3 枚、temporal cap を下げる duplication map、Reservoir / Path Depth / Reconnection / Temporal / Paired Spatial / Duplication / Replay Tasks / Replay Validation の debug view を追加しています。
 
 論文準拠として残っている項目も明示しておきます。shader 側の full path replay、random replay、forced NEE reconnection は現状 selected-path payload による近似段階です。pairwise MIS と dual-footprint validation はまだ完全な論文実装ではありません。replay compaction は task 分類と debug / stats 表示までで、fallback dispatch を完全に indirect replay pipeline へ置き換える段階は未完了です。
 
