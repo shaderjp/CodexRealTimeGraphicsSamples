@@ -16,6 +16,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorPathtracingRe
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorPathtracingReSTIRDIVulkan", "VulkanReSTIRDI\Source\BistroExteriorPathtracingReSTIRDIVulkan.vcxproj", "{7B7F8D89-8C0E-41BA-8D76-B597081024F2}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorPathtracingReSTIRPTEnhancedD3D12", "D3D12ReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedD3D12.vcxproj", "{6B2D2009-B418-4545-8FC2-915ED6760309}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BistroExteriorPathtracingReSTIRPTEnhancedVulkan", "VulkanReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedVulkan.vcxproj", "{3FDA6F36-2D12-4C64-992E-631F733514ED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -46,6 +50,14 @@ Global
 		{7B7F8D89-8C0E-41BA-8D76-B597081024F2}.Debug|x64.Build.0 = Debug|x64
 		{7B7F8D89-8C0E-41BA-8D76-B597081024F2}.Release|x64.ActiveCfg = Release|x64
 		{7B7F8D89-8C0E-41BA-8D76-B597081024F2}.Release|x64.Build.0 = Release|x64
+		{6B2D2009-B418-4545-8FC2-915ED6760309}.Debug|x64.ActiveCfg = Debug|x64
+		{6B2D2009-B418-4545-8FC2-915ED6760309}.Debug|x64.Build.0 = Debug|x64
+		{6B2D2009-B418-4545-8FC2-915ED6760309}.Release|x64.ActiveCfg = Release|x64
+		{6B2D2009-B418-4545-8FC2-915ED6760309}.Release|x64.Build.0 = Release|x64
+		{3FDA6F36-2D12-4C64-992E-631F733514ED}.Debug|x64.ActiveCfg = Debug|x64
+		{3FDA6F36-2D12-4C64-992E-631F733514ED}.Debug|x64.Build.0 = Debug|x64
+		{3FDA6F36-2D12-4C64-992E-631F733514ED}.Release|x64.ActiveCfg = Release|x64
+		{3FDA6F36-2D12-4C64-992E-631F733514ED}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -57,6 +69,8 @@ Global
 		{86DD4065-F372-4FC5-8C50-E2765EA37033} = {4E4C59BB-A62F-44F5-8D0D-7C7BB2735DB4}
 		{C8B9B2BD-2A91-4969-BF04-F3028B3166A0} = {4E4C59BB-A62F-44F5-8D0D-7C7BB2735DB4}
 		{7B7F8D89-8C0E-41BA-8D76-B597081024F2} = {4E4C59BB-A62F-44F5-8D0D-7C7BB2735DB4}
+		{6B2D2009-B418-4545-8FC2-915ED6760309} = {4E4C59BB-A62F-44F5-8D0D-7C7BB2735DB4}
+		{3FDA6F36-2D12-4C64-992E-631F733514ED} = {4E4C59BB-A62F-44F5-8D0D-7C7BB2735DB4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {37B83D13-3D62-4316-AF1B-2F37B5C3BA64}

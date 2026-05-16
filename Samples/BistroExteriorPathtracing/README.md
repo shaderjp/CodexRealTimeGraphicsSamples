@@ -12,6 +12,8 @@ Japanese documentation is available in [README.ja.md](README.ja.md).
 - `BistroExteriorPathtracingReSTIRVulkan`
 - `BistroExteriorPathtracingReSTIRDID3D12`
 - `BistroExteriorPathtracingReSTIRDIVulkan`
+- `BistroExteriorPathtracingReSTIRPTEnhancedD3D12`
+- `BistroExteriorPathtracingReSTIRPTEnhancedVulkan`
 
 ## Screenshots
 
@@ -46,6 +48,7 @@ The first two captures use the same D3D12 camera/settings and show the built-in 
 - Built-in lightweight denoiser with normal/depth/albedo/luminance-guided multi-scale cross-bilateral filtering; no extra third-party dependency is required
 - ReSTIR GI comparison projects with a separate shader variant, ReSTIR-oriented controls, extra candidate sampling, current/history/spatial reservoir buffers, and a compute temporal/spatial reuse pass
 - ReSTIR DI comparison projects that reuse the same reservoir flow for primary-hit direct lighting from the sun and local light list
+- ReSTIR PT Enhanced research projects with a selected-path reservoir payload, GBuffer-validated temporal reuse, paired spatial reuse offsets, duplication-map temporal caps, replay task classification, and dedicated debug views
 - ImGui controls for light, camera, sky, environment map, emissive lights, procedural area lights, ray bias, path depth, accumulation, denoiser settings, ReSTIR settings, and debug views
 - Debug views: Final, Base Color, World Normal, Normal Texture, Roughness, Metallic, Emissive, Hit Distance, Direct NEE, Indirect, Bounce Count, Accumulation Samples, Sky, Reservoir Weight, Temporal Reuse, Spatial Reuse
 - Renderer stats for materials, textures, vertices, indices, primitives, BLAS geometries, TLAS instances, SBT records, light list counts, output resolution, accumulation samples, and ray tracing limits
@@ -55,6 +58,10 @@ The first two captures use the same D3D12 camera/settings and show the built-in 
 The ReSTIR projects are added as separate D3D12/Vulkan executables so the path-tracing baseline, ReSTIR GI, and ReSTIR DI can be compared side by side. The ReSTIR GI variant generates a current per-pixel indirect-light reservoir in raygen. The ReSTIR DI variant instead reservoirs primary-hit direct lighting from the sun and the local light list. Both variants combine current, history, and neighborhood reservoirs in a compute temporal/spatial reuse pass, and copy the resolved spatial reservoirs back to history for the next frame.
 
 The implementation remains intentionally compact for this sample: it focuses on reservoir reuse, debug visibility, and comparable D3D12/Vulkan resource flow rather than a full production ReSTIR pipeline with visibility validation or disocclusion tests.
+
+The ReSTIR PT Enhanced projects are separate D3D12/Vulkan executables that keep the baseline and existing ReSTIR GI/DI variants untouched. The current implementation stores a compressed selected-path reservoir, writes Enhanced-only current/history GBuffer resources, validates temporal and spatial history against primary-hit position/normal/material data, uses three CPU-generated paired spatial reuse offset tables, tracks a duplication map for temporal cap reduction, and exposes reservoir, path-depth, reconnection, temporal, paired-spatial, duplication, and replay-task debug views.
+
+Remaining research items are intentionally documented as work-in-progress: full path replay with shader-side random replay and forced NEE reconnection is still approximated by the current selected-path payload, pairwise MIS/dual-footprint validation is not yet a complete paper-accurate implementation, and replay compaction currently classifies tasks and reports them rather than replacing the fallback dispatch path with a full indirect replay pipeline.
 
 ## Denoiser
 
@@ -104,6 +111,8 @@ Samples\BistroExteriorPathtracing\D3D12ReSTIR\Source\BistroExteriorPathtracingRe
 Samples\BistroExteriorPathtracing\VulkanReSTIR\Source\BistroExteriorPathtracingReSTIRVulkan.vcxproj
 Samples\BistroExteriorPathtracing\D3D12ReSTIRDI\Source\BistroExteriorPathtracingReSTIRDID3D12.vcxproj
 Samples\BistroExteriorPathtracing\VulkanReSTIRDI\Source\BistroExteriorPathtracingReSTIRDIVulkan.vcxproj
+Samples\BistroExteriorPathtracing\D3D12ReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedD3D12.vcxproj
+Samples\BistroExteriorPathtracing\VulkanReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedVulkan.vcxproj
 ```
 
 ## Device Requirements

@@ -10,6 +10,8 @@
 #include <DirectXTex.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -20,7 +22,14 @@ namespace
     constexpr UINT ImGuiDescriptorCount = 64;
     constexpr DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     constexpr DXGI_FORMAT AccumulationFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    constexpr UINT RestirReservoirStride = sizeof(XMFLOAT4) * 2;
+    constexpr UINT LegacyRestirReservoirStride = sizeof(XMFLOAT4) * 2;
+    constexpr UINT EnhancedRestirReservoirStride = sizeof(XMFLOAT4) * 4;
+    constexpr UINT EnhancedGBufferStride = sizeof(XMFLOAT4) * 2 + sizeof(UINT) * 4;
+    constexpr UINT EnhancedDuplicationStride = sizeof(UINT);
+    constexpr UINT EnhancedReplayTaskStride = sizeof(UINT) * 4;
+    constexpr int EnhancedReuseTextureSizes[] = { 254, 230, 210 };
+    constexpr float EnhancedReuseTextureSigma = 16.0f;
+    constexpr int EnhancedReuseTextureRadius = 30;
     const wchar_t* RayGenShaderName = L"RayGen";
     const wchar_t* MissShaderName = L"Miss";
     const wchar_t* ShadowMissShaderName = L"ShadowMiss";
@@ -52,7 +61,101 @@ namespace
 
     bool UsesRestirReuse(BistroPathtracingMode mode)
     {
-        return mode == BistroPathtracingMode::ReSTIR || mode == BistroPathtracingMode::ReSTIRDI;
+        return mode == BistroPathtracingMode::ReSTIR || mode == BistroPathtracingMode::ReSTIRDI || mode == BistroPathtracingMode::ReSTIRPTEnhanced;
+    }
+
+    bool UsesRestirPtEnhanced(BistroPathtracingMode mode)
+    {
+        return mode == BistroPathtracingMode::ReSTIRPTEnhanced;
+    }
+
+    UINT RestirReservoirStride(BistroPathtracingMode mode)
+    {
+        return UsesRestirPtEnhanced(mode) ? EnhancedRestirReservoirStride : LegacyRestirReservoirStride;
+    }
+
+    UINT HashCpu(UINT value)
+    {
+        value ^= value >> 16;
+        value *= 2246822519u;
+        value ^= value >> 13;
+        value *= 3266489917u;
+        value ^= value >> 16;
+        return value;
+    }
+
+    float RandomCpu(UINT& state)
+    {
+        state = HashCpu(state);
+        return static_cast<float>(state & 0x00ffffffu) / 16777216.0f;
+    }
+
+    UINT PackSignedOffset(int x, int y)
+    {
+        const auto pack16 = [](int value)
+        {
+            return static_cast<UINT>(static_cast<std::uint16_t>(static_cast<std::int16_t>(value)));
+        };
+        return pack16(x) | (pack16(y) << 16u);
+    }
+
+    std::vector<UINT> BuildEnhancedReuseTextureOffsets()
+    {
+        std::vector<UINT> offsets;
+        for (int size : EnhancedReuseTextureSizes)
+        {
+            const size_t base = offsets.size();
+            offsets.resize(base + static_cast<size_t>(size) * static_cast<size_t>(size), 0u);
+            std::vector<uint8_t> assigned(static_cast<size_t>(size) * static_cast<size_t>(size), 0u);
+            for (int y = 0; y < size; ++y)
+            {
+                for (int x = 0; x < size; ++x)
+                {
+                    const size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) + static_cast<size_t>(x);
+                    if (assigned[index] != 0)
+                    {
+                        continue;
+                    }
+
+                    UINT state = HashCpu(static_cast<UINT>(x * 1973 ^ y * 9277 ^ size * 26699));
+                    int targetX = x;
+                    int targetY = y;
+                    for (int attempt = 0; attempt < 24; ++attempt)
+                    {
+                        const float u0 = (std::max)(RandomCpu(state), 0.0001f);
+                        const float u1 = RandomCpu(state);
+                        const float radius = std::sqrt(-2.0f * std::log(u0)) * EnhancedReuseTextureSigma;
+                        const float angle = u1 * DirectX::XM_2PI;
+                        const int dx = static_cast<int>(std::round((std::min)(radius, static_cast<float>(EnhancedReuseTextureRadius)) * std::cos(angle)));
+                        const int dy = static_cast<int>(std::round((std::min)(radius, static_cast<float>(EnhancedReuseTextureRadius)) * std::sin(angle)));
+                        const int candidateX = x + dx;
+                        const int candidateY = y + dy;
+                        if (candidateX < 0 || candidateY < 0 || candidateX >= size || candidateY >= size)
+                        {
+                            continue;
+                        }
+
+                        const size_t candidateIndex = static_cast<size_t>(candidateY) * static_cast<size_t>(size) + static_cast<size_t>(candidateX);
+                        if (assigned[candidateIndex] == 0)
+                        {
+                            targetX = candidateX;
+                            targetY = candidateY;
+                            break;
+                        }
+                    }
+
+                    const size_t targetIndex = static_cast<size_t>(targetY) * static_cast<size_t>(size) + static_cast<size_t>(targetX);
+                    offsets[base + index] = PackSignedOffset(targetX - x, targetY - y);
+                    assigned[index] = 1u;
+                    if (targetIndex != index && assigned[targetIndex] == 0)
+                    {
+                        offsets[base + targetIndex] = PackSignedOffset(x - targetX, y - targetY);
+                        assigned[targetIndex] = 1u;
+                    }
+                }
+            }
+        }
+        return offsets;
     }
 
     const char* PathtracingModeName(BistroPathtracingMode mode)
@@ -63,6 +166,8 @@ namespace
             return "ReSTIR GI";
         case BistroPathtracingMode::ReSTIRDI:
             return "ReSTIR DI";
+        case BistroPathtracingMode::ReSTIRPTEnhanced:
+            return "ReSTIR PT Enhanced";
         default:
             return "Path Tracing";
         }
@@ -271,24 +376,53 @@ void BistroExteriorPathtracingD3D12::CreateOutputResources()
     m_device->CreateUnorderedAccessView(m_denoiseAov1.Get(), nullptr, &accumulationUav, CpuDescriptor(DescriptorDenoiseAov1Uav));
 
     m_restirReservoirElementCount = (std::max)(1u, m_width * m_height);
-    m_restirReservoirBufferSize = static_cast<UINT64>(m_restirReservoirElementCount) * RestirReservoirStride;
+    const UINT restirReservoirStride = RestirReservoirStride(m_mode);
+    m_restirReservoirBufferSize = static_cast<UINT64>(m_restirReservoirElementCount) * restirReservoirStride;
     m_restirReservoirCurrent = CreateUavBuffer(m_restirReservoirBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"RestirReservoirCurrent");
     m_restirReservoirHistory = CreateUavBuffer(m_restirReservoirBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"RestirReservoirHistory");
     m_restirReservoirSpatial = CreateUavBuffer(m_restirReservoirBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"RestirReservoirSpatial");
+    m_enhancedGBufferSize = static_cast<UINT64>(m_restirReservoirElementCount) * EnhancedGBufferStride;
+    m_enhancedDuplicationMapSize = static_cast<UINT64>(m_restirReservoirElementCount) * EnhancedDuplicationStride;
+    m_enhancedReplayTaskBufferSize = static_cast<UINT64>(m_restirReservoirElementCount) * EnhancedReplayTaskStride;
+    m_enhancedGBufferCurrent = CreateUavBuffer(m_enhancedGBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"EnhancedGBufferCurrent");
+    m_enhancedGBufferHistory = CreateUavBuffer(m_enhancedGBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"EnhancedGBufferHistory");
+    m_enhancedDuplicationCurrent = CreateUavBuffer(m_enhancedDuplicationMapSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"EnhancedDuplicationCurrent");
+    m_enhancedDuplicationHistory = CreateUavBuffer(m_enhancedDuplicationMapSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"EnhancedDuplicationHistory");
+    m_enhancedReplayTasks = CreateUavBuffer(m_enhancedReplayTaskBufferSize, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, L"EnhancedReplayTasks");
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC reservoirUav = {};
     reservoirUav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
     reservoirUav.Buffer.NumElements = m_restirReservoirElementCount;
-    reservoirUav.Buffer.StructureByteStride = RestirReservoirStride;
+    reservoirUav.Buffer.StructureByteStride = restirReservoirStride;
     m_device->CreateUnorderedAccessView(m_restirReservoirCurrent.Get(), nullptr, &reservoirUav, CpuDescriptor(DescriptorRestirCurrentUav));
     m_device->CreateUnorderedAccessView(m_restirReservoirHistory.Get(), nullptr, &reservoirUav, CpuDescriptor(DescriptorRestirHistoryUav));
     m_device->CreateUnorderedAccessView(m_restirReservoirSpatial.Get(), nullptr, &reservoirUav, CpuDescriptor(DescriptorRestirSpatialUav));
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC gbufferUav = {};
+    gbufferUav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    gbufferUav.Buffer.NumElements = m_restirReservoirElementCount;
+    gbufferUav.Buffer.StructureByteStride = EnhancedGBufferStride;
+    m_device->CreateUnorderedAccessView(m_enhancedGBufferCurrent.Get(), nullptr, &gbufferUav, CpuDescriptor(DescriptorEnhancedGBufferCurrentUav));
+    m_device->CreateUnorderedAccessView(m_enhancedGBufferHistory.Get(), nullptr, &gbufferUav, CpuDescriptor(DescriptorEnhancedGBufferHistoryUav));
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC duplicationUav = {};
+    duplicationUav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    duplicationUav.Buffer.NumElements = m_restirReservoirElementCount;
+    duplicationUav.Buffer.StructureByteStride = EnhancedDuplicationStride;
+    m_device->CreateUnorderedAccessView(m_enhancedDuplicationCurrent.Get(), nullptr, &duplicationUav, CpuDescriptor(DescriptorEnhancedDuplicationCurrentUav));
+    m_device->CreateUnorderedAccessView(m_enhancedDuplicationHistory.Get(), nullptr, &duplicationUav, CpuDescriptor(DescriptorEnhancedDuplicationHistoryUav));
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC replayTaskUav = {};
+    replayTaskUav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    replayTaskUav.Buffer.NumElements = m_restirReservoirElementCount;
+    replayTaskUav.Buffer.StructureByteStride = EnhancedReplayTaskStride;
+    m_device->CreateUnorderedAccessView(m_enhancedReplayTasks.Get(), nullptr, &replayTaskUav, CpuDescriptor(DescriptorEnhancedReplayTasksUav));
 }
 
 void BistroExteriorPathtracingD3D12::CreateGlobalRootSignature()
 {
     CD3DX12_DESCRIPTOR_RANGE uavRange;
-    uavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 7, 0, 0);
+    uavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, DescriptorVertexBuffer, 0, 0);
     CD3DX12_DESCRIPTOR_RANGE sceneBufferRange;
     sceneBufferRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5, 1, 0);
     CD3DX12_DESCRIPTOR_RANGE textureRange;
@@ -361,6 +495,20 @@ void BistroExteriorPathtracingD3D12::CreateSceneBuffers()
     lightSrv.Buffer.NumElements = static_cast<UINT>(m_lights.size());
     lightSrv.Buffer.StructureByteStride = sizeof(Bistro::RtLight);
     m_device->CreateShaderResourceView(m_lightBuffer.Get(), &lightSrv, CpuDescriptor(DescriptorLightBuffer));
+
+    std::vector<UINT> reuseOffsets = BuildEnhancedReuseTextureOffsets();
+    m_enhancedReuseTextureElementCount = static_cast<UINT>(reuseOffsets.size());
+    m_enhancedReuseTextureOffsets = CreateDefaultBuffer(
+        reuseOffsets.data(),
+        static_cast<UINT64>(reuseOffsets.size()) * sizeof(UINT),
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        L"EnhancedReuseTextureOffsets");
+    D3D12_UNORDERED_ACCESS_VIEW_DESC reuseUav = {};
+    reuseUav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    reuseUav.Buffer.NumElements = m_enhancedReuseTextureElementCount;
+    reuseUav.Buffer.StructureByteStride = sizeof(UINT);
+    m_device->CreateUnorderedAccessView(m_enhancedReuseTextureOffsets.Get(), nullptr, &reuseUav, CpuDescriptor(DescriptorEnhancedReuseTextureUav));
 
     const UINT constantSize = CalculateConstantBufferByteSize(sizeof(SceneConstantBuffer));
     ThrowIfFailed(m_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(constantSize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_sceneConstantBuffer)));
@@ -671,7 +819,13 @@ void BistroExteriorPathtracingD3D12::UpdateConstantBuffer(float)
     const float aspectRatio = static_cast<float>(m_width) / static_cast<float>(m_height);
     XMMATRIX view = m_camera.GetViewMatrix();
     XMMATRIX projection = XMMatrixPerspectiveFovLH(XMConvertToRadians(60.0f), aspectRatio, 0.1f, 10000.0f);
-    XMMATRIX inverseViewProjection = XMMatrixInverse(nullptr, view * projection);
+    XMMATRIX viewProjection = view * projection;
+    XMMATRIX inverseViewProjection = XMMatrixInverse(nullptr, viewProjection);
+    if (!m_hasPreviousViewProjection)
+    {
+        XMStoreFloat4x4(&m_previousViewProjection, viewProjection);
+        m_hasPreviousViewProjection = true;
+    }
 
     SceneConstantBuffer constants{};
     XMStoreFloat4x4(&constants.inverseViewProjection, inverseViewProjection);
@@ -695,7 +849,12 @@ void BistroExteriorPathtracingD3D12::UpdateConstantBuffer(float)
     constants.environmentOptions = XMFLOAT4(m_environmentMapEnabled ? 1.0f : 0.0f, m_environmentIntensity, m_environmentRotation, 0.0f);
     constants.denoiseOptions = XMFLOAT4(m_denoiserEnabled ? 1.0f : 0.0f, static_cast<float>(m_denoiserSpatialIterations), m_denoiserNormalSigma, m_denoiserDepthSigma);
     constants.denoiseOptions2 = XMFLOAT4(m_denoiserLuminanceSigma, m_denoiserAlbedoSigma, m_denoiserStrength, 0.0f);
+    constants.restirEnhancedOptions0 = XMFLOAT4(m_enhancedPairedSpatial ? 1.0f : 0.0f, m_enhancedDuplicationDecorrelate ? 1.0f : 0.0f, m_enhancedColorReuse ? 1.0f : 0.0f, m_enhancedRussianRoulette ? 1.0f : 0.0f);
+    constants.restirEnhancedOptions1 = XMFLOAT4(m_enhancedReplayCompaction ? 1.0f : 0.0f, m_enhancedFootprintC, m_enhancedRoughnessAlphaMin, static_cast<float>(m_enhancedPrimaryRisCandidates));
+    constants.restirEnhancedOptions2 = XMFLOAT4(0.0f, m_enhancedTemporalCapDefault, m_enhancedTemporalCapMin, m_enhancedDuplicationAlpha);
+    constants.previousViewProjection = m_previousViewProjection;
     memcpy(m_mappedSceneConstants, &constants, sizeof(constants));
+    XMStoreFloat4x4(&m_previousViewProjection, viewProjection);
 
     if (!m_freezeAccumulation)
     {
@@ -770,7 +929,10 @@ void BistroExteriorPathtracingD3D12::DispatchRays()
         CD3DX12_RESOURCE_BARRIER::UAV(m_accumulationOutput.Get()),
         CD3DX12_RESOURCE_BARRIER::UAV(m_denoiseAov0.Get()),
         CD3DX12_RESOURCE_BARRIER::UAV(m_denoiseAov1.Get()),
-        CD3DX12_RESOURCE_BARRIER::UAV(m_restirReservoirCurrent.Get())
+        CD3DX12_RESOURCE_BARRIER::UAV(m_restirReservoirCurrent.Get()),
+        CD3DX12_RESOURCE_BARRIER::UAV(m_enhancedGBufferCurrent.Get()),
+        CD3DX12_RESOURCE_BARRIER::UAV(m_enhancedDuplicationCurrent.Get()),
+        CD3DX12_RESOURCE_BARRIER::UAV(m_enhancedReplayTasks.Get())
     };
     m_commandList->ResourceBarrier(_countof(uavBarriers), uavBarriers);
 }
@@ -806,6 +968,29 @@ void BistroExteriorPathtracingD3D12::RunRestirReusePass()
         CD3DX12_RESOURCE_BARRIER::Transition(m_restirReservoirHistory.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
     };
     m_commandList->ResourceBarrier(_countof(afterCopy), afterCopy);
+
+    if (UsesRestirPtEnhanced(m_mode))
+    {
+        D3D12_RESOURCE_BARRIER enhancedToCopy[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedGBufferCurrent.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedGBufferHistory.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedDuplicationCurrent.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedDuplicationHistory.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST)
+        };
+        m_commandList->ResourceBarrier(_countof(enhancedToCopy), enhancedToCopy);
+        m_commandList->CopyBufferRegion(m_enhancedGBufferHistory.Get(), 0, m_enhancedGBufferCurrent.Get(), 0, m_enhancedGBufferSize);
+        m_commandList->CopyBufferRegion(m_enhancedDuplicationHistory.Get(), 0, m_enhancedDuplicationCurrent.Get(), 0, m_enhancedDuplicationMapSize);
+
+        D3D12_RESOURCE_BARRIER enhancedAfterCopy[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedGBufferCurrent.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedGBufferHistory.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedDuplicationCurrent.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_enhancedDuplicationHistory.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+        };
+        m_commandList->ResourceBarrier(_countof(enhancedAfterCopy), enhancedAfterCopy);
+    }
 }
 
 void BistroExteriorPathtracingD3D12::RunDenoisePass()
@@ -883,7 +1068,8 @@ void BistroExteriorPathtracingD3D12::BuildUI()
     {
         "Final", "Base Color", "World Normal", "Normal Texture", "Roughness", "Metallic", "Emissive",
         "Hit Distance", "Direct NEE", "Indirect", "Bounce Count", "Accumulation Samples", "Sky",
-        "Reservoir Weight", "Temporal Reuse", "Spatial Reuse"
+        "Reservoir Weight", "Temporal Reuse", "Spatial Reuse", "Enhanced Reservoir", "Enhanced Path Depth",
+        "Enhanced Reconnection", "Enhanced Paired Spatial", "Enhanced Duplication", "Enhanced Replay Tasks"
     };
     if (ImGui::Combo("Debug View", &m_debugViewMode, debugModes, _countof(debugModes))) ResetAccumulation();
     if (ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip)) ResetAccumulation();
@@ -928,12 +1114,26 @@ void BistroExteriorPathtracingD3D12::BuildUI()
     if (UsesRestirReuse(m_mode))
     {
         ImGui::Separator();
-        ImGui::TextUnformatted(m_mode == BistroPathtracingMode::ReSTIRDI ? "ReSTIR DI" : "ReSTIR GI");
+        ImGui::TextUnformatted(PathtracingModeName(m_mode));
         if (ImGui::Checkbox("Temporal Reuse", &m_restirTemporalReuse)) ResetAccumulation();
-        if (ImGui::SliderInt("Spatial Reuse Passes", &m_restirSpatialReusePasses, 0, 4)) ResetAccumulation();
+        if (ImGui::SliderInt("Spatial Reuse Passes", &m_restirSpatialReusePasses, 0, UsesRestirPtEnhanced(m_mode) ? 3 : 4)) ResetAccumulation();
         if (ImGui::SliderInt("Spatial Radius", &m_restirSpatialRadius, 1, 64)) ResetAccumulation();
         if (ImGui::SliderInt("Candidate Samples / Pixel", &m_restirCandidateSamples, 1, 4)) ResetAccumulation();
         if (ImGui::SliderFloat("Reservoir M Clamp", &m_restirMClamp, 1.0f, 64.0f, "%.1f")) ResetAccumulation();
+        if (UsesRestirPtEnhanced(m_mode))
+        {
+            if (ImGui::Checkbox("Paired Spatial Reuse", &m_enhancedPairedSpatial)) ResetAccumulation();
+            if (ImGui::Checkbox("Duplication Decorrelation", &m_enhancedDuplicationDecorrelate)) ResetAccumulation();
+            if (ImGui::Checkbox("Vector Color Reuse", &m_enhancedColorReuse)) ResetAccumulation();
+            if (ImGui::Checkbox("Initial Russian Roulette", &m_enhancedRussianRoulette)) ResetAccumulation();
+            if (ImGui::Checkbox("Replay Compaction", &m_enhancedReplayCompaction)) ResetAccumulation();
+            if (ImGui::SliderFloat("Footprint C", &m_enhancedFootprintC, 0.001f, 0.08f, "%.3f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Roughness Alpha Min", &m_enhancedRoughnessAlphaMin, 0.02f, 0.8f, "%.2f")) ResetAccumulation();
+            if (ImGui::SliderInt("Primary RIS Candidates", &m_enhancedPrimaryRisCandidates, 1, 32)) ResetAccumulation();
+            if (ImGui::SliderFloat("Temporal Cap Default", &m_enhancedTemporalCapDefault, 1.0f, 64.0f, "%.1f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Temporal Cap Min", &m_enhancedTemporalCapMin, 1.0f, 16.0f, "%.1f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Duplication Alpha", &m_enhancedDuplicationAlpha, 0.05f, 1.0f, "%.2f")) ResetAccumulation();
+        }
         if (ImGui::Button("Reset Reservoirs")) ResetAccumulation();
     }
     ImGui::PopItemWidth();
@@ -989,6 +1189,14 @@ void BistroExteriorPathtracingD3D12::BuildRendererStatsUI()
     ImGui::Text("Output: %ux%u", m_width, m_height);
     ImGui::Text("Accumulated Samples: %u", m_accumulatedFrames);
     ImGui::Text("Mode: %s", PathtracingModeName(m_mode));
+    if (UsesRestirPtEnhanced(m_mode))
+    {
+        const double gpuMegabytes =
+            static_cast<double>(m_restirReservoirBufferSize * 3u + m_enhancedGBufferSize * 2u + m_enhancedDuplicationMapSize * 2u + m_enhancedReplayTaskBufferSize) / (1024.0 * 1024.0);
+        ImGui::Text("Enhanced GPU Buffers: %.2f MB", gpuMegabytes);
+        ImGui::Text("Reuse Texture Entries: %u", m_enhancedReuseTextureElementCount);
+        ImGui::Text("Replay Task Slots: %u", m_restirReservoirElementCount);
+    }
     ImGui::Text("Denoiser: %s (%d pass%s)", m_denoiserEnabled ? "On" : "Off", m_denoiserSpatialIterations, m_denoiserSpatialIterations == 1 ? "" : "es");
     ImGui::End();
 }
@@ -1012,6 +1220,11 @@ void BistroExteriorPathtracingD3D12::ResizeOutput(UINT width, UINT height)
     m_restirReservoirCurrent.Reset();
     m_restirReservoirHistory.Reset();
     m_restirReservoirSpatial.Reset();
+    m_enhancedGBufferCurrent.Reset();
+    m_enhancedGBufferHistory.Reset();
+    m_enhancedDuplicationCurrent.Reset();
+    m_enhancedDuplicationHistory.Reset();
+    m_enhancedReplayTasks.Reset();
     m_width = width;
     m_height = height;
     m_aspectRatio = static_cast<float>(m_width) / static_cast<float>(m_height);
@@ -1134,6 +1347,7 @@ void BistroExteriorPathtracingD3D12::ResetAccumulation()
 {
     m_accumulatedFrames = 0;
     m_resetAccumulationRequested = true;
+    m_hasPreviousViewProjection = false;
 }
 
 bool BistroExteriorPathtracingD3D12::HasAccumulationStateChanged()
@@ -1225,11 +1439,19 @@ std::wstring BistroExteriorPathtracingD3D12::ShaderFileName() const
     {
         return L"BistroExteriorPathtracingReSTIRDI.lib.cso";
     }
+    if (m_mode == BistroPathtracingMode::ReSTIRPTEnhanced)
+    {
+        return L"BistroExteriorPathtracingReSTIRPTEnhanced.lib.cso";
+    }
     return L"BistroExteriorPathtracing.lib.cso";
 }
 
 std::wstring BistroExteriorPathtracingD3D12::RestirReuseShaderFileName() const
 {
+    if (m_mode == BistroPathtracingMode::ReSTIRPTEnhanced)
+    {
+        return L"BistroExteriorPathtracingReSTIRPTEnhancedResolve.cso";
+    }
     return L"BistroExteriorPathtracingReSTIRResolve.cso";
 }
 

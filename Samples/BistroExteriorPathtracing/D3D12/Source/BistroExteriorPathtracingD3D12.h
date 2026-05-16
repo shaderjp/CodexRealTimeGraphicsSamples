@@ -15,7 +15,8 @@ enum class BistroPathtracingMode
 {
     Pathtracing,
     ReSTIR,
-    ReSTIRDI
+    ReSTIRDI,
+    ReSTIRPTEnhanced
 };
 
 class BistroExteriorPathtracingD3D12 : public DXSample
@@ -43,6 +44,12 @@ private:
         DescriptorRestirSpatialUav,
         DescriptorDenoiseAov0Uav,
         DescriptorDenoiseAov1Uav,
+        DescriptorEnhancedGBufferCurrentUav,
+        DescriptorEnhancedGBufferHistoryUav,
+        DescriptorEnhancedDuplicationCurrentUav,
+        DescriptorEnhancedDuplicationHistoryUav,
+        DescriptorEnhancedReuseTextureUav,
+        DescriptorEnhancedReplayTasksUav,
         DescriptorVertexBuffer,
         DescriptorIndexBuffer,
         DescriptorGeometryBuffer,
@@ -82,6 +89,10 @@ private:
         XMFLOAT4 environmentOptions;
         XMFLOAT4 denoiseOptions;
         XMFLOAT4 denoiseOptions2;
+        XMFLOAT4 restirEnhancedOptions0;
+        XMFLOAT4 restirEnhancedOptions1;
+        XMFLOAT4 restirEnhancedOptions2;
+        XMFLOAT4X4 previousViewProjection;
     };
 
     struct GpuTexture
@@ -133,6 +144,12 @@ private:
     ComPtr<ID3D12Resource> m_restirReservoirCurrent;
     ComPtr<ID3D12Resource> m_restirReservoirHistory;
     ComPtr<ID3D12Resource> m_restirReservoirSpatial;
+    ComPtr<ID3D12Resource> m_enhancedGBufferCurrent;
+    ComPtr<ID3D12Resource> m_enhancedGBufferHistory;
+    ComPtr<ID3D12Resource> m_enhancedDuplicationCurrent;
+    ComPtr<ID3D12Resource> m_enhancedDuplicationHistory;
+    ComPtr<ID3D12Resource> m_enhancedReuseTextureOffsets;
+    ComPtr<ID3D12Resource> m_enhancedReplayTasks;
     ComPtr<ID3D12Resource> m_sceneConstantBuffer;
     UINT8* m_mappedSceneConstants = nullptr;
     UINT m_frameIndex = 0;
@@ -143,6 +160,10 @@ private:
     UINT m_descriptorCount = 0;
     UINT m_restirReservoirElementCount = 1;
     UINT64 m_restirReservoirBufferSize = 0;
+    UINT64 m_enhancedGBufferSize = 0;
+    UINT64 m_enhancedDuplicationMapSize = 0;
+    UINT64 m_enhancedReplayTaskBufferSize = 0;
+    UINT m_enhancedReuseTextureElementCount = 0;
 
     BistroPathtracingMode m_mode = BistroPathtracingMode::Pathtracing;
     Bistro::Scene m_scene;
@@ -210,6 +231,19 @@ private:
     int m_restirSpatialRadius = 16;
     int m_restirCandidateSamples = 1;
     float m_restirMClamp = 20.0f;
+    bool m_enhancedPairedSpatial = true;
+    bool m_enhancedDuplicationDecorrelate = true;
+    bool m_enhancedColorReuse = true;
+    bool m_enhancedRussianRoulette = true;
+    bool m_enhancedReplayCompaction = true;
+    float m_enhancedFootprintC = 0.02f;
+    float m_enhancedRoughnessAlphaMin = 0.2f;
+    int m_enhancedPrimaryRisCandidates = 32;
+    float m_enhancedTemporalCapDefault = 20.0f;
+    float m_enhancedTemporalCapMin = 1.0f;
+    float m_enhancedDuplicationAlpha = 0.1f;
+    XMFLOAT4X4 m_previousViewProjection = {};
+    bool m_hasPreviousViewProjection = false;
     bool m_denoiserEnabled = true;
     int m_denoiserSpatialIterations = 2;
     float m_denoiserNormalSigma = 0.25f;

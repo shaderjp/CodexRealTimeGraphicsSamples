@@ -7,7 +7,9 @@
 #include "backends/imgui_impl_win32.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <cstdint>
 #include <fstream>
 #include <set>
 #include <stdexcept>
@@ -31,7 +33,14 @@ namespace
 
     constexpr VkFormat AccumulationFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
     constexpr uint32_t TextureSlotCount = Bistro::TextureSlotCount;
-    constexpr VkDeviceSize RestirReservoirStride = sizeof(DirectX::XMFLOAT4) * 2;
+    constexpr VkDeviceSize LegacyRestirReservoirStride = sizeof(DirectX::XMFLOAT4) * 2;
+    constexpr VkDeviceSize EnhancedRestirReservoirStride = sizeof(DirectX::XMFLOAT4) * 4;
+    constexpr VkDeviceSize EnhancedGBufferStride = sizeof(DirectX::XMFLOAT4) * 2 + sizeof(uint32_t) * 4;
+    constexpr VkDeviceSize EnhancedDuplicationStride = sizeof(uint32_t);
+    constexpr VkDeviceSize EnhancedReplayTaskStride = sizeof(uint32_t) * 4;
+    constexpr int EnhancedReuseTextureSizes[] = { 254, 230, 210 };
+    constexpr float EnhancedReuseTextureSigma = 16.0f;
+    constexpr int EnhancedReuseTextureRadius = 30;
 
     VkFormat ToVkFormat(DXGI_FORMAT format)
     {
@@ -86,7 +95,101 @@ namespace
 
     bool UsesRestirReuse(BistroPathtracingMode mode)
     {
-        return mode == BistroPathtracingMode::ReSTIR || mode == BistroPathtracingMode::ReSTIRDI;
+        return mode == BistroPathtracingMode::ReSTIR || mode == BistroPathtracingMode::ReSTIRDI || mode == BistroPathtracingMode::ReSTIRPTEnhanced;
+    }
+
+    bool UsesRestirPtEnhanced(BistroPathtracingMode mode)
+    {
+        return mode == BistroPathtracingMode::ReSTIRPTEnhanced;
+    }
+
+    VkDeviceSize RestirReservoirStride(BistroPathtracingMode mode)
+    {
+        return UsesRestirPtEnhanced(mode) ? EnhancedRestirReservoirStride : LegacyRestirReservoirStride;
+    }
+
+    uint32_t HashCpu(uint32_t value)
+    {
+        value ^= value >> 16;
+        value *= 2246822519u;
+        value ^= value >> 13;
+        value *= 3266489917u;
+        value ^= value >> 16;
+        return value;
+    }
+
+    float RandomCpu(uint32_t& state)
+    {
+        state = HashCpu(state);
+        return static_cast<float>(state & 0x00ffffffu) / 16777216.0f;
+    }
+
+    uint32_t PackSignedOffset(int x, int y)
+    {
+        const auto pack16 = [](int value)
+        {
+            return static_cast<uint32_t>(static_cast<uint16_t>(static_cast<int16_t>(value)));
+        };
+        return pack16(x) | (pack16(y) << 16u);
+    }
+
+    std::vector<uint32_t> BuildEnhancedReuseTextureOffsets()
+    {
+        std::vector<uint32_t> offsets;
+        for (int size : EnhancedReuseTextureSizes)
+        {
+            const size_t base = offsets.size();
+            offsets.resize(base + static_cast<size_t>(size) * static_cast<size_t>(size), 0u);
+            std::vector<uint8_t> assigned(static_cast<size_t>(size) * static_cast<size_t>(size), 0u);
+            for (int y = 0; y < size; ++y)
+            {
+                for (int x = 0; x < size; ++x)
+                {
+                    const size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) + static_cast<size_t>(x);
+                    if (assigned[index] != 0)
+                    {
+                        continue;
+                    }
+
+                    uint32_t state = HashCpu(static_cast<uint32_t>(x * 1973 ^ y * 9277 ^ size * 26699));
+                    int targetX = x;
+                    int targetY = y;
+                    for (int attempt = 0; attempt < 24; ++attempt)
+                    {
+                        const float u0 = (std::max)(RandomCpu(state), 0.0001f);
+                        const float u1 = RandomCpu(state);
+                        const float radius = std::sqrt(-2.0f * std::log(u0)) * EnhancedReuseTextureSigma;
+                        const float angle = u1 * DirectX::XM_2PI;
+                        const int dx = static_cast<int>(std::round((std::min)(radius, static_cast<float>(EnhancedReuseTextureRadius)) * std::cos(angle)));
+                        const int dy = static_cast<int>(std::round((std::min)(radius, static_cast<float>(EnhancedReuseTextureRadius)) * std::sin(angle)));
+                        const int candidateX = x + dx;
+                        const int candidateY = y + dy;
+                        if (candidateX < 0 || candidateY < 0 || candidateX >= size || candidateY >= size)
+                        {
+                            continue;
+                        }
+
+                        const size_t candidateIndex = static_cast<size_t>(candidateY) * static_cast<size_t>(size) + static_cast<size_t>(candidateX);
+                        if (assigned[candidateIndex] == 0)
+                        {
+                            targetX = candidateX;
+                            targetY = candidateY;
+                            break;
+                        }
+                    }
+
+                    const size_t targetIndex = static_cast<size_t>(targetY) * static_cast<size_t>(size) + static_cast<size_t>(targetX);
+                    offsets[base + index] = PackSignedOffset(targetX - x, targetY - y);
+                    assigned[index] = 1u;
+                    if (targetIndex != index && assigned[targetIndex] == 0)
+                    {
+                        offsets[base + targetIndex] = PackSignedOffset(x - targetX, y - targetY);
+                        assigned[targetIndex] = 1u;
+                    }
+                }
+            }
+        }
+        return offsets;
     }
 
     const char* PathtracingModeName(BistroPathtracingMode mode)
@@ -97,6 +200,8 @@ namespace
             return "ReSTIR GI";
         case BistroPathtracingMode::ReSTIRDI:
             return "ReSTIR DI";
+        case BistroPathtracingMode::ReSTIRPTEnhanced:
+            return "ReSTIR PT Enhanced";
         default:
             return "Path Tracing";
         }
@@ -418,6 +523,11 @@ void BistroExteriorPathtracingVulkan::RecreateSwapChain()
     DestroyBuffer(m_restirReservoirCurrent);
     DestroyBuffer(m_restirReservoirHistory);
     DestroyBuffer(m_restirReservoirSpatial);
+    DestroyBuffer(m_enhancedGBufferCurrent);
+    DestroyBuffer(m_enhancedGBufferHistory);
+    DestroyBuffer(m_enhancedDuplicationCurrent);
+    DestroyBuffer(m_enhancedDuplicationHistory);
+    DestroyBuffer(m_enhancedReplayTasks);
     for (VkImageView imageView : m_swapChainImageViews)
     {
         vkDestroyImageView(m_device, imageView, nullptr);
@@ -481,6 +591,12 @@ void BistroExteriorPathtracingVulkan::Cleanup()
     DestroyBuffer(m_restirReservoirCurrent);
     DestroyBuffer(m_restirReservoirHistory);
     DestroyBuffer(m_restirReservoirSpatial);
+    DestroyBuffer(m_enhancedGBufferCurrent);
+    DestroyBuffer(m_enhancedGBufferHistory);
+    DestroyBuffer(m_enhancedDuplicationCurrent);
+    DestroyBuffer(m_enhancedDuplicationHistory);
+    DestroyBuffer(m_enhancedReuseTextureOffsets);
+    DestroyBuffer(m_enhancedReplayTasks);
 
     for (GpuTexture& texture : m_textures)
     {
@@ -833,6 +949,21 @@ void BistroExteriorPathtracingVulkan::CreateOutputImages()
     CreateImage(m_swapChainExtent.width, m_swapChainExtent.height, 1, AccumulationFormat, VK_IMAGE_USAGE_STORAGE_BIT, m_denoiseAov1Image, m_denoiseAov1ImageMemory);
     m_denoiseAov1ImageView = CreateImageView(m_denoiseAov1Image, AccumulationFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     TransitionImageLayoutImmediate(m_denoiseAov1Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    m_restirReservoirElementCount = (std::max)(1u, m_swapChainExtent.width * m_swapChainExtent.height);
+    m_restirReservoirBufferSize = static_cast<VkDeviceSize>(m_restirReservoirElementCount) * RestirReservoirStride(m_mode);
+    m_enhancedGBufferSize = static_cast<VkDeviceSize>(m_restirReservoirElementCount) * EnhancedGBufferStride;
+    m_enhancedDuplicationMapSize = static_cast<VkDeviceSize>(m_restirReservoirElementCount) * EnhancedDuplicationStride;
+    m_enhancedReplayTaskBufferSize = static_cast<VkDeviceSize>(m_restirReservoirElementCount) * EnhancedReplayTaskStride;
+    VkBufferUsageFlags outputBufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    CreateBuffer(m_restirReservoirBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirCurrent);
+    CreateBuffer(m_restirReservoirBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirHistory);
+    CreateBuffer(m_restirReservoirBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirSpatial);
+    CreateBuffer(m_enhancedGBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_enhancedGBufferCurrent);
+    CreateBuffer(m_enhancedGBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_enhancedGBufferHistory);
+    CreateBuffer(m_enhancedDuplicationMapSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_enhancedDuplicationCurrent);
+    CreateBuffer(m_enhancedDuplicationMapSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_enhancedDuplicationHistory);
+    CreateBuffer(m_enhancedReplayTaskBufferSize, outputBufferUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_enhancedReplayTasks);
 }
 
 void BistroExteriorPathtracingVulkan::CreateSceneBuffers()
@@ -844,12 +975,13 @@ void BistroExteriorPathtracingVulkan::CreateSceneBuffers()
 
     CreateBuffer(sizeof(SceneConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_sceneUniformBuffer);
 
-    m_restirReservoirElementCount = (std::max)(1u, m_swapChainExtent.width * m_swapChainExtent.height);
-    m_restirReservoirBufferSize = static_cast<VkDeviceSize>(m_restirReservoirElementCount) * RestirReservoirStride;
-    VkBufferUsageFlags reservoirUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    CreateBuffer(m_restirReservoirBufferSize, reservoirUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirCurrent);
-    CreateBuffer(m_restirReservoirBufferSize, reservoirUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirHistory);
-    CreateBuffer(m_restirReservoirBufferSize, reservoirUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_restirReservoirSpatial);
+    std::vector<uint32_t> reuseOffsets = BuildEnhancedReuseTextureOffsets();
+    m_enhancedReuseTextureElementCount = static_cast<uint32_t>(reuseOffsets.size());
+    UploadBuffer(
+        reuseOffsets.data(),
+        static_cast<VkDeviceSize>(reuseOffsets.size()) * sizeof(uint32_t),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        m_enhancedReuseTextureOffsets);
 }
 
 uint32_t BistroExteriorPathtracingVulkan::CreateTextureResource(const std::wstring& path, bool srgb, const uint8_t fallback[4], std::map<std::wstring, uint32_t>& cache)
@@ -951,7 +1083,7 @@ void BistroExteriorPathtracingVulkan::CreateDescriptorSetLayouts()
         VK_SHADER_STAGE_MISS_BIT_KHR;
     const VkShaderStageFlags rtAndComputeStages = rtStages | VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 15> bindings{};
+    std::array<VkDescriptorSetLayoutBinding, 21> bindings{};
     bindings[0] = { 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, rtStages, nullptr };
     bindings[1] = { 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, rtAndComputeStages, nullptr };
     bindings[2] = { 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, rtAndComputeStages, nullptr };
@@ -967,6 +1099,12 @@ void BistroExteriorPathtracingVulkan::CreateDescriptorSetLayouts()
     bindings[12] = { 12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtStages, nullptr };
     bindings[13] = { 13, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, rtAndComputeStages, nullptr };
     bindings[14] = { 14, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, rtAndComputeStages, nullptr };
+    bindings[15] = { 15, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
+    bindings[16] = { 16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
+    bindings[17] = { 17, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
+    bindings[18] = { 18, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
+    bindings[19] = { 19, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
+    bindings[20] = { 20, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, rtAndComputeStages, nullptr };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1004,7 +1142,7 @@ void BistroExteriorPathtracingVulkan::CreateDescriptorPool()
     poolSizes[0] = { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 };
     poolSizes[1] = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4 };
     poolSizes[2] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 };
-    poolSizes[3] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8 };
+    poolSizes[3] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 14 };
     poolSizes[4] = { VK_DESCRIPTOR_TYPE_SAMPLER, 1 };
     poolSizes[5] = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, textureDescriptorCount };
     poolSizes[6] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 };
@@ -1069,10 +1207,16 @@ void BistroExteriorPathtracingVulkan::CreateDescriptorSets()
     VkDescriptorBufferInfo restirCurrentInfo{ m_restirReservoirCurrent.buffer, 0, m_restirReservoirBufferSize };
     VkDescriptorBufferInfo restirHistoryInfo{ m_restirReservoirHistory.buffer, 0, m_restirReservoirBufferSize };
     VkDescriptorBufferInfo restirSpatialInfo{ m_restirReservoirSpatial.buffer, 0, m_restirReservoirBufferSize };
+    VkDescriptorBufferInfo enhancedGBufferCurrentInfo{ m_enhancedGBufferCurrent.buffer, 0, m_enhancedGBufferSize };
+    VkDescriptorBufferInfo enhancedGBufferHistoryInfo{ m_enhancedGBufferHistory.buffer, 0, m_enhancedGBufferSize };
+    VkDescriptorBufferInfo enhancedDuplicationCurrentInfo{ m_enhancedDuplicationCurrent.buffer, 0, m_enhancedDuplicationMapSize };
+    VkDescriptorBufferInfo enhancedDuplicationHistoryInfo{ m_enhancedDuplicationHistory.buffer, 0, m_enhancedDuplicationMapSize };
+    VkDescriptorBufferInfo enhancedReuseTextureInfo{ m_enhancedReuseTextureOffsets.buffer, 0, m_enhancedReuseTextureOffsets.size };
+    VkDescriptorBufferInfo enhancedReplayTasksInfo{ m_enhancedReplayTasks.buffer, 0, m_enhancedReplayTaskBufferSize };
     VkDescriptorImageInfo samplerInfo{};
     samplerInfo.sampler = m_textureSampler;
 
-    std::array<VkWriteDescriptorSet, 15> writes{};
+    std::array<VkWriteDescriptorSet, 21> writes{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].pNext = &asInfo;
     writes[0].dstSet = m_descriptorSet;
@@ -1093,6 +1237,12 @@ void BistroExteriorPathtracingVulkan::CreateDescriptorSets()
     writes[12] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 12, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &lightInfo, nullptr };
     writes[13] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 13, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &denoiseAov0Info, nullptr, nullptr };
     writes[14] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 14, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &denoiseAov1Info, nullptr, nullptr };
+    writes[15] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 15, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedGBufferCurrentInfo, nullptr };
+    writes[16] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 16, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedGBufferHistoryInfo, nullptr };
+    writes[17] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 17, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedDuplicationCurrentInfo, nullptr };
+    writes[18] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 18, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedDuplicationHistoryInfo, nullptr };
+    writes[19] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 19, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedReuseTextureInfo, nullptr };
+    writes[20] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, m_descriptorSet, 20, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &enhancedReplayTasksInfo, nullptr };
     vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
     std::vector<VkDescriptorImageInfo> textureInfos(textureDescriptorCount);
@@ -1529,8 +1679,29 @@ void BistroExteriorPathtracingVulkan::RecordRestirReusePass(VkCommandBuffer comm
         return;
     }
 
-    VkBufferMemoryBarrier toCompute[3]{};
-    VkBuffer buffers[] = { m_restirReservoirCurrent.buffer, m_restirReservoirHistory.buffer, m_restirReservoirSpatial.buffer };
+    VkBufferMemoryBarrier toCompute[8]{};
+    VkBuffer buffers[] =
+    {
+        m_restirReservoirCurrent.buffer,
+        m_restirReservoirHistory.buffer,
+        m_restirReservoirSpatial.buffer,
+        m_enhancedGBufferCurrent.buffer,
+        m_enhancedGBufferHistory.buffer,
+        m_enhancedDuplicationCurrent.buffer,
+        m_enhancedDuplicationHistory.buffer,
+        m_enhancedReplayTasks.buffer
+    };
+    VkDeviceSize bufferSizes[] =
+    {
+        m_restirReservoirBufferSize,
+        m_restirReservoirBufferSize,
+        m_restirReservoirBufferSize,
+        m_enhancedGBufferSize,
+        m_enhancedGBufferSize,
+        m_enhancedDuplicationMapSize,
+        m_enhancedDuplicationMapSize,
+        m_enhancedReplayTaskBufferSize
+    };
     for (uint32_t i = 0; i < _countof(toCompute); ++i)
     {
         toCompute[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -1540,7 +1711,7 @@ void BistroExteriorPathtracingVulkan::RecordRestirReusePass(VkCommandBuffer comm
         toCompute[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         toCompute[i].buffer = buffers[i];
         toCompute[i].offset = 0;
-        toCompute[i].size = m_restirReservoirBufferSize;
+        toCompute[i].size = bufferSizes[i];
     }
     vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, _countof(toCompute), toCompute, 0, nullptr);
 
@@ -1589,6 +1760,58 @@ void BistroExteriorPathtracingVulkan::RecordRestirReusePass(VkCommandBuffer comm
     afterCopy[1].offset = 0;
     afterCopy[1].size = m_restirReservoirBufferSize;
     vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, _countof(afterCopy), afterCopy, 0, nullptr);
+
+    if (UsesRestirPtEnhanced(m_mode))
+    {
+        VkBufferMemoryBarrier enhancedToCopy[4]{};
+        VkBuffer enhancedBuffers[] =
+        {
+            m_enhancedGBufferCurrent.buffer,
+            m_enhancedGBufferHistory.buffer,
+            m_enhancedDuplicationCurrent.buffer,
+            m_enhancedDuplicationHistory.buffer
+        };
+        VkDeviceSize enhancedSizes[] =
+        {
+            m_enhancedGBufferSize,
+            m_enhancedGBufferSize,
+            m_enhancedDuplicationMapSize,
+            m_enhancedDuplicationMapSize
+        };
+        for (uint32_t i = 0; i < _countof(enhancedToCopy); ++i)
+        {
+            enhancedToCopy[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            enhancedToCopy[i].srcAccessMask = (i % 2u == 0u) ? VK_ACCESS_SHADER_WRITE_BIT : VK_ACCESS_SHADER_READ_BIT;
+            enhancedToCopy[i].dstAccessMask = (i % 2u == 0u) ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+            enhancedToCopy[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            enhancedToCopy[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            enhancedToCopy[i].buffer = enhancedBuffers[i];
+            enhancedToCopy[i].offset = 0;
+            enhancedToCopy[i].size = enhancedSizes[i];
+        }
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, _countof(enhancedToCopy), enhancedToCopy, 0, nullptr);
+
+        VkBufferCopy gbufferCopy{};
+        gbufferCopy.size = m_enhancedGBufferSize;
+        vkCmdCopyBuffer(commandBuffer, m_enhancedGBufferCurrent.buffer, m_enhancedGBufferHistory.buffer, 1, &gbufferCopy);
+        VkBufferCopy duplicationCopy{};
+        duplicationCopy.size = m_enhancedDuplicationMapSize;
+        vkCmdCopyBuffer(commandBuffer, m_enhancedDuplicationCurrent.buffer, m_enhancedDuplicationHistory.buffer, 1, &duplicationCopy);
+
+        VkBufferMemoryBarrier enhancedAfterCopy[4]{};
+        for (uint32_t i = 0; i < _countof(enhancedAfterCopy); ++i)
+        {
+            enhancedAfterCopy[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            enhancedAfterCopy[i].srcAccessMask = (i % 2u == 0u) ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+            enhancedAfterCopy[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            enhancedAfterCopy[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            enhancedAfterCopy[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            enhancedAfterCopy[i].buffer = enhancedBuffers[i];
+            enhancedAfterCopy[i].offset = 0;
+            enhancedAfterCopy[i].size = enhancedSizes[i];
+        }
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, _countof(enhancedAfterCopy), enhancedAfterCopy, 0, nullptr);
+    }
 }
 
 void BistroExteriorPathtracingVulkan::RecordDenoisePass(VkCommandBuffer commandBuffer)
@@ -1724,7 +1947,8 @@ void BistroExteriorPathtracingVulkan::BuildUI()
     {
         "Final", "Base Color", "World Normal", "Normal Texture", "Roughness", "Metallic", "Emissive",
         "Hit Distance", "Direct NEE", "Indirect", "Bounce Count", "Accumulation Samples", "Sky",
-        "Reservoir Weight", "Temporal Reuse", "Spatial Reuse"
+        "Reservoir Weight", "Temporal Reuse", "Spatial Reuse", "Enhanced Reservoir", "Enhanced Path Depth",
+        "Enhanced Reconnection", "Enhanced Paired Spatial", "Enhanced Duplication", "Enhanced Replay Tasks"
     };
     if (ImGui::Combo("Debug View", &m_debugViewMode, debugModes, _countof(debugModes))) ResetAccumulation();
     if (ImGui::Checkbox("Normal Map Y Flip", &m_debugNormalMapYFlip)) ResetAccumulation();
@@ -1769,12 +1993,26 @@ void BistroExteriorPathtracingVulkan::BuildUI()
     if (UsesRestirReuse(m_mode))
     {
         ImGui::Separator();
-        ImGui::TextUnformatted(m_mode == BistroPathtracingMode::ReSTIRDI ? "ReSTIR DI" : "ReSTIR GI");
+        ImGui::TextUnformatted(PathtracingModeName(m_mode));
         if (ImGui::Checkbox("Temporal Reuse", &m_restirTemporalReuse)) ResetAccumulation();
-        if (ImGui::SliderInt("Spatial Reuse Passes", &m_restirSpatialReusePasses, 0, 4)) ResetAccumulation();
+        if (ImGui::SliderInt("Spatial Reuse Passes", &m_restirSpatialReusePasses, 0, UsesRestirPtEnhanced(m_mode) ? 3 : 4)) ResetAccumulation();
         if (ImGui::SliderInt("Spatial Radius", &m_restirSpatialRadius, 1, 64)) ResetAccumulation();
         if (ImGui::SliderInt("Candidate Samples / Pixel", &m_restirCandidateSamples, 1, 4)) ResetAccumulation();
         if (ImGui::SliderFloat("Reservoir M Clamp", &m_restirMClamp, 1.0f, 64.0f, "%.1f")) ResetAccumulation();
+        if (UsesRestirPtEnhanced(m_mode))
+        {
+            if (ImGui::Checkbox("Paired Spatial Reuse", &m_enhancedPairedSpatial)) ResetAccumulation();
+            if (ImGui::Checkbox("Duplication Decorrelation", &m_enhancedDuplicationDecorrelate)) ResetAccumulation();
+            if (ImGui::Checkbox("Vector Color Reuse", &m_enhancedColorReuse)) ResetAccumulation();
+            if (ImGui::Checkbox("Initial Russian Roulette", &m_enhancedRussianRoulette)) ResetAccumulation();
+            if (ImGui::Checkbox("Replay Compaction", &m_enhancedReplayCompaction)) ResetAccumulation();
+            if (ImGui::SliderFloat("Footprint C", &m_enhancedFootprintC, 0.001f, 0.08f, "%.3f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Roughness Alpha Min", &m_enhancedRoughnessAlphaMin, 0.02f, 0.8f, "%.2f")) ResetAccumulation();
+            if (ImGui::SliderInt("Primary RIS Candidates", &m_enhancedPrimaryRisCandidates, 1, 32)) ResetAccumulation();
+            if (ImGui::SliderFloat("Temporal Cap Default", &m_enhancedTemporalCapDefault, 1.0f, 64.0f, "%.1f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Temporal Cap Min", &m_enhancedTemporalCapMin, 1.0f, 16.0f, "%.1f")) ResetAccumulation();
+            if (ImGui::SliderFloat("Duplication Alpha", &m_enhancedDuplicationAlpha, 0.05f, 1.0f, "%.2f")) ResetAccumulation();
+        }
         if (ImGui::Button("Reset Reservoirs")) ResetAccumulation();
     }
     ImGui::PopItemWidth();
@@ -1827,6 +2065,14 @@ void BistroExteriorPathtracingVulkan::BuildRendererStatsUI()
     ImGui::Text("Output: %ux%u", m_swapChainExtent.width, m_swapChainExtent.height);
     ImGui::Text("Accumulated Samples: %u", m_accumulatedFrames);
     ImGui::Text("Mode: %s", PathtracingModeName(m_mode));
+    if (UsesRestirPtEnhanced(m_mode))
+    {
+        const double gpuMegabytes =
+            static_cast<double>(m_restirReservoirBufferSize * 3u + m_enhancedGBufferSize * 2u + m_enhancedDuplicationMapSize * 2u + m_enhancedReplayTaskBufferSize) / (1024.0 * 1024.0);
+        ImGui::Text("Enhanced GPU Buffers: %.2f MB", gpuMegabytes);
+        ImGui::Text("Reuse Texture Entries: %u", m_enhancedReuseTextureElementCount);
+        ImGui::Text("Replay Task Slots: %u", m_restirReservoirElementCount);
+    }
     ImGui::Text("Denoiser: %s (%d pass%s)", m_denoiserEnabled ? "On" : "Off", m_denoiserSpatialIterations, m_denoiserSpatialIterations == 1 ? "" : "es");
     ImGui::Separator();
     ImGui::Text("Max Recursion: %u", MaxTraceRecursionDepth());
@@ -1862,6 +2108,7 @@ void BistroExteriorPathtracingVulkan::ResetAccumulation()
 {
     m_accumulatedFrames = 0;
     m_resetAccumulationRequested = true;
+    m_hasPreviousViewProjection = false;
 }
 
 bool BistroExteriorPathtracingVulkan::HasAccumulationStateChanged()
@@ -1905,7 +2152,13 @@ void BistroExteriorPathtracingVulkan::UpdateUniformBuffer(float)
     const float aspectRatio = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
     DirectX::XMMATRIX view = m_camera.GetViewMatrix();
     DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(60.0f), aspectRatio, 0.1f, 10000.0f);
-    DirectX::XMMATRIX inverseViewProjection = DirectX::XMMatrixInverse(nullptr, view * projection);
+    DirectX::XMMATRIX viewProjection = view * projection;
+    DirectX::XMMATRIX inverseViewProjection = DirectX::XMMatrixInverse(nullptr, viewProjection);
+    if (!m_hasPreviousViewProjection)
+    {
+        DirectX::XMStoreFloat4x4(&m_previousViewProjection, viewProjection);
+        m_hasPreviousViewProjection = true;
+    }
 
     SceneConstants constants{};
     DirectX::XMStoreFloat4x4(&constants.inverseViewProjection, inverseViewProjection);
@@ -1929,11 +2182,16 @@ void BistroExteriorPathtracingVulkan::UpdateUniformBuffer(float)
     constants.environmentOptions = DirectX::XMFLOAT4(m_environmentMapEnabled ? 1.0f : 0.0f, m_environmentIntensity, m_environmentRotation, 0.0f);
     constants.denoiseOptions = DirectX::XMFLOAT4(m_denoiserEnabled ? 1.0f : 0.0f, static_cast<float>(m_denoiserSpatialIterations), m_denoiserNormalSigma, m_denoiserDepthSigma);
     constants.denoiseOptions2 = DirectX::XMFLOAT4(m_denoiserLuminanceSigma, m_denoiserAlbedoSigma, m_denoiserStrength, 0.0f);
+    constants.restirEnhancedOptions0 = DirectX::XMFLOAT4(m_enhancedPairedSpatial ? 1.0f : 0.0f, m_enhancedDuplicationDecorrelate ? 1.0f : 0.0f, m_enhancedColorReuse ? 1.0f : 0.0f, m_enhancedRussianRoulette ? 1.0f : 0.0f);
+    constants.restirEnhancedOptions1 = DirectX::XMFLOAT4(m_enhancedReplayCompaction ? 1.0f : 0.0f, m_enhancedFootprintC, m_enhancedRoughnessAlphaMin, static_cast<float>(m_enhancedPrimaryRisCandidates));
+    constants.restirEnhancedOptions2 = DirectX::XMFLOAT4(0.0f, m_enhancedTemporalCapDefault, m_enhancedTemporalCapMin, m_enhancedDuplicationAlpha);
+    constants.previousViewProjection = m_previousViewProjection;
 
     void* mapped = nullptr;
     vkMapMemory(m_device, m_sceneUniformBuffer.memory, 0, sizeof(constants), 0, &mapped);
     memcpy(mapped, &constants, sizeof(constants));
     vkUnmapMemory(m_device, m_sceneUniformBuffer.memory);
+    DirectX::XMStoreFloat4x4(&m_previousViewProjection, viewProjection);
 
     if (!m_freezeAccumulation)
     {
@@ -2356,11 +2614,19 @@ std::wstring BistroExteriorPathtracingVulkan::ShaderFileName() const
     {
         return L"BistroExteriorPathtracingReSTIRDI.spv";
     }
+    if (m_mode == BistroPathtracingMode::ReSTIRPTEnhanced)
+    {
+        return L"BistroExteriorPathtracingReSTIRPTEnhanced.spv";
+    }
     return L"BistroExteriorPathtracing.spv";
 }
 
 std::wstring BistroExteriorPathtracingVulkan::RestirReuseShaderFileName() const
 {
+    if (m_mode == BistroPathtracingMode::ReSTIRPTEnhanced)
+    {
+        return L"BistroExteriorPathtracingReSTIRPTEnhancedResolve.spv";
+    }
     return L"BistroExteriorPathtracingReSTIRResolve.spv";
 }
 

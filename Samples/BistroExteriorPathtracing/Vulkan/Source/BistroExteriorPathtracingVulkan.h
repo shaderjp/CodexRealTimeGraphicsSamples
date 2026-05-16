@@ -25,7 +25,8 @@ enum class BistroPathtracingMode
 {
     Pathtracing,
     ReSTIR,
-    ReSTIRDI
+    ReSTIRDI,
+    ReSTIRPTEnhanced
 };
 
 class BistroExteriorPathtracingVulkan
@@ -72,6 +73,10 @@ private:
         DirectX::XMFLOAT4 environmentOptions;
         DirectX::XMFLOAT4 denoiseOptions;
         DirectX::XMFLOAT4 denoiseOptions2;
+        DirectX::XMFLOAT4 restirEnhancedOptions0;
+        DirectX::XMFLOAT4 restirEnhancedOptions1;
+        DirectX::XMFLOAT4 restirEnhancedOptions2;
+        DirectX::XMFLOAT4X4 previousViewProjection;
     };
 
     struct GpuBuffer
@@ -247,7 +252,17 @@ private:
     GpuBuffer m_restirReservoirCurrent;
     GpuBuffer m_restirReservoirHistory;
     GpuBuffer m_restirReservoirSpatial;
+    GpuBuffer m_enhancedGBufferCurrent;
+    GpuBuffer m_enhancedGBufferHistory;
+    GpuBuffer m_enhancedDuplicationCurrent;
+    GpuBuffer m_enhancedDuplicationHistory;
+    GpuBuffer m_enhancedReuseTextureOffsets;
+    GpuBuffer m_enhancedReplayTasks;
     VkDeviceSize m_restirReservoirBufferSize = 0;
+    VkDeviceSize m_enhancedGBufferSize = 0;
+    VkDeviceSize m_enhancedDuplicationMapSize = 0;
+    VkDeviceSize m_enhancedReplayTaskBufferSize = 0;
+    uint32_t m_enhancedReuseTextureElementCount = 0;
     uint32_t m_restirReservoirElementCount = 1;
     AccelerationStructure m_blas;
     AccelerationStructure m_tlas;
@@ -309,6 +324,19 @@ private:
     int m_restirSpatialRadius = 16;
     int m_restirCandidateSamples = 1;
     float m_restirMClamp = 20.0f;
+    bool m_enhancedPairedSpatial = true;
+    bool m_enhancedDuplicationDecorrelate = true;
+    bool m_enhancedColorReuse = true;
+    bool m_enhancedRussianRoulette = true;
+    bool m_enhancedReplayCompaction = true;
+    float m_enhancedFootprintC = 0.02f;
+    float m_enhancedRoughnessAlphaMin = 0.2f;
+    int m_enhancedPrimaryRisCandidates = 32;
+    float m_enhancedTemporalCapDefault = 20.0f;
+    float m_enhancedTemporalCapMin = 1.0f;
+    float m_enhancedDuplicationAlpha = 0.1f;
+    DirectX::XMFLOAT4X4 m_previousViewProjection = {};
+    bool m_hasPreviousViewProjection = false;
     bool m_denoiserEnabled = true;
     int m_denoiserSpatialIterations = 2;
     float m_denoiserNormalSigma = 0.25f;

@@ -12,6 +12,8 @@
 - `BistroExteriorPathtracingReSTIRVulkan`
 - `BistroExteriorPathtracingReSTIRDID3D12`
 - `BistroExteriorPathtracingReSTIRDIVulkan`
+- `BistroExteriorPathtracingReSTIRPTEnhancedD3D12`
+- `BistroExteriorPathtracingReSTIRPTEnhancedVulkan`
 
 ## スクリーンショット
 
@@ -46,6 +48,7 @@
 - normal / depth / albedo / luminance を使った multi-scale cross-bilateral filter の軽量 denoiser。追加 ThirdParty なしでサンプル内の compute pass として実装
 - ReSTIR GI 比較用プロジェクトとして、別 shader variant、ReSTIR 向け UI、追加 candidate sampling、current/history/spatial reservoir buffer、temporal / spatial reuse compute pass を追加
 - Sun と local light list による primary-hit direct lighting に同じ reservoir flow を適用する ReSTIR DI 比較用プロジェクト
+- selected-path reservoir payload、GBuffer で検証する temporal reuse、paired spatial reuse offsets、duplication-map temporal cap、replay task classification、専用 debug view を持つ ReSTIR PT Enhanced 研究用プロジェクト
 - ImGui から light、camera、sky、environment map、emissive light、procedural area light、ray bias、path depth、accumulation、denoiser 設定、ReSTIR 設定、debug view を調整
 - Debug View: Final、Base Color、World Normal、Normal Texture、Roughness、Metallic、Emissive、Hit Distance、Direct NEE、Indirect、Bounce Count、Accumulation Samples、Sky、Reservoir Weight、Temporal Reuse、Spatial Reuse
 - Renderer Stats: material、texture、vertex、index、primitive、BLAS geometry、TLAS instance、SBT record、light list count、output resolution、accumulation sample、ray tracing limit
@@ -55,6 +58,10 @@
 ReSTIR プロジェクトは、通常の path tracing baseline、ReSTIR GI、ReSTIR DI を同じソリューション内で比較できるように、D3D12 / Vulkan の別 executable として追加しています。ReSTIR GI 版では raygen で pixel ごとの indirect-light reservoir を生成します。ReSTIR DI 版では、sun と local light list から得られる primary-hit direct lighting を reservoir 化します。どちらも compute の temporal / spatial reuse pass で current、history、近傍 reservoir を合成して、解決した spatial reservoir を次フレーム用の history にコピーします。
 
 このサンプルでは、production 向けの visibility validation や disocclusion test までは入れず、reservoir reuse、debug visibility、D3D12 / Vulkan で対応する resource flow を小さく確認できる形にしています。
+
+ReSTIR PT Enhanced 版は通常版、既存 ReSTIR GI、既存 ReSTIR DI に影響しない D3D12 / Vulkan の別 executable です。現在の実装では compressed selected-path reservoir、Enhanced 専用 current/history GBuffer、primary-hit の position/normal/material による temporal / spatial history validation、CPU 生成の paired spatial reuse offset table 3 枚、temporal cap を下げる duplication map、Reservoir / Path Depth / Reconnection / Temporal / Paired Spatial / Duplication / Replay Tasks の debug view を追加しています。
+
+論文準拠として残っている項目も明示しておきます。shader 側の full path replay、random replay、forced NEE reconnection は現状 selected-path payload による近似段階です。pairwise MIS と dual-footprint validation はまだ完全な論文実装ではありません。replay compaction は task 分類と debug / stats 表示までで、fallback dispatch を完全に indirect replay pipeline へ置き換える段階は未完了です。
 
 ## Denoiser
 
@@ -104,6 +111,8 @@ Samples\BistroExteriorPathtracing\D3D12ReSTIR\Source\BistroExteriorPathtracingRe
 Samples\BistroExteriorPathtracing\VulkanReSTIR\Source\BistroExteriorPathtracingReSTIRVulkan.vcxproj
 Samples\BistroExteriorPathtracing\D3D12ReSTIRDI\Source\BistroExteriorPathtracingReSTIRDID3D12.vcxproj
 Samples\BistroExteriorPathtracing\VulkanReSTIRDI\Source\BistroExteriorPathtracingReSTIRDIVulkan.vcxproj
+Samples\BistroExteriorPathtracing\D3D12ReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedD3D12.vcxproj
+Samples\BistroExteriorPathtracing\VulkanReSTIRPTEnhanced\Source\BistroExteriorPathtracingReSTIRPTEnhancedVulkan.vcxproj
 ```
 
 ## デバイス要件

@@ -10,6 +10,9 @@
 #ifndef PT_RESTIR_DI
 #define PT_RESTIR_DI 0
 #endif
+#ifndef PT_RESTIR_PT_ENHANCED
+#define PT_RESTIR_PT_ENHANCED 0
+#endif
 
 static const float PI = 3.14159265359f;
 static const uint TextureSlotBaseColor = 0;
@@ -38,6 +41,10 @@ struct SceneConstants
     float4 environmentOptions;
     float4 denoiseOptions;
     float4 denoiseOptions2;
+    float4 restirEnhancedOptions0;
+    float4 restirEnhancedOptions1;
+    float4 restirEnhancedOptions2;
+    row_major float4x4 previousViewProjection;
 };
 
 struct MeshVertex
@@ -78,6 +85,7 @@ struct RayPayload
     float metallic;
     float3 emissive;
     float ao;
+    uint materialIndex;
 };
 
 struct ShadowPayload
@@ -97,6 +105,7 @@ struct SurfaceData
     float roughness;
     float metallic;
     float3 emissive;
+    uint materialIndex;
     RtMaterial material;
 };
 
@@ -104,7 +113,20 @@ struct RestirReservoir
 {
     float4 radianceWeight;
     float4 meta;
+#if PT_RESTIR_PT_ENHANCED
+    uint4 pathSeedsAndFlags;
+    uint4 reconnectData;
+#endif
 };
+
+#if PT_RESTIR_PT_ENHANCED
+struct EnhancedGBuffer
+{
+    float4 positionDepth;
+    float4 normalRoughness;
+    uint4 materialAndFlags;
+};
+#endif
 
 struct RtLight
 {
@@ -129,6 +151,14 @@ VK_BINDING(11, 0) RWStructuredBuffer<RestirReservoir> g_restirSpatial : register
 VK_BINDING(12, 0) StructuredBuffer<RtLight> g_lights : register(t5, space0);
 VK_BINDING(13, 0) RWTexture2D<float4> g_denoiseAov0 : register(u5, space0);
 VK_BINDING(14, 0) RWTexture2D<float4> g_denoiseAov1 : register(u6, space0);
+#if PT_RESTIR_PT_ENHANCED
+VK_BINDING(15, 0) RWStructuredBuffer<EnhancedGBuffer> g_enhancedGBufferCurrent : register(u7, space0);
+VK_BINDING(16, 0) RWStructuredBuffer<EnhancedGBuffer> g_enhancedGBufferHistory : register(u8, space0);
+VK_BINDING(17, 0) RWStructuredBuffer<uint> g_enhancedDuplicationCurrent : register(u9, space0);
+VK_BINDING(18, 0) RWStructuredBuffer<uint> g_enhancedDuplicationHistory : register(u10, space0);
+VK_BINDING(19, 0) RWStructuredBuffer<uint> g_enhancedReuseTextures : register(u11, space0);
+VK_BINDING(20, 0) RWStructuredBuffer<uint4> g_enhancedReplayTasks : register(u12, space0);
+#endif
 VK_BINDING(0, 1) Texture2D g_textures[] : register(t0, space1);
 
 uint Hash(uint value)
@@ -179,6 +209,10 @@ RestirReservoir EmptyRestirReservoir()
     RestirReservoir reservoir;
     reservoir.radianceWeight = 0.0f.xxxx;
     reservoir.meta = 0.0f.xxxx;
+#if PT_RESTIR_PT_ENHANCED
+    reservoir.pathSeedsAndFlags = 0u.xxxx;
+    reservoir.reconnectData = 0u.xxxx;
+#endif
     return reservoir;
 }
 
@@ -193,6 +227,10 @@ RestirReservoir MakeRestirReservoir(float3 radiance, uint sampleCount)
     float target = RestirTarget(radiance);
     reservoir.radianceWeight = float4(radiance, target);
     reservoir.meta = float4((float)sampleCount, 0.0f, 0.0f, target > 0.0001f ? 1.0f : 0.0f);
+#if PT_RESTIR_PT_ENHANCED
+    reservoir.pathSeedsAndFlags = 0u.xxxx;
+    reservoir.reconnectData = 0u.xxxx;
+#endif
     return reservoir;
 }
 
@@ -209,11 +247,19 @@ void CombineRestirReservoir(inout RestirReservoir reservoir, RestirReservoir can
         return;
     }
 
-    float totalWeight = reservoir.radianceWeight.w + candidate.radianceWeight.w;
+    float reservoirWeightBefore = reservoir.radianceWeight.w;
+    float totalWeight = reservoirWeightBefore + candidate.radianceWeight.w;
     reservoir.radianceWeight.rgb = (reservoir.radianceWeight.rgb * reservoir.radianceWeight.w + candidate.radianceWeight.rgb * candidate.radianceWeight.w) / max(totalWeight, 0.0001f);
     reservoir.radianceWeight.w = min(totalWeight, max(g_scene.restirOptions.w, 0.001f));
     reservoir.meta.x = min(reservoir.meta.x + candidate.meta.x, max(g_scene.restirOptions.w, 1.0f));
     reservoir.meta.w = 1.0f;
+#if PT_RESTIR_PT_ENHANCED
+    if (candidate.radianceWeight.w >= reservoirWeightBefore)
+    {
+        reservoir.pathSeedsAndFlags = candidate.pathSeedsAndFlags;
+        reservoir.reconnectData = candidate.reconnectData;
+    }
+#endif
 }
 
 RestirReservoir LoadRestirHistory(int2 pixel, uint2 dimensions)
@@ -224,6 +270,148 @@ RestirReservoir LoadRestirHistory(int2 pixel, uint2 dimensions)
     }
     return g_restirHistory[PixelIndex((uint2)pixel, dimensions)];
 }
+
+#if PT_RESTIR_PT_ENHANCED
+EnhancedGBuffer EmptyEnhancedGBuffer()
+{
+    EnhancedGBuffer gbuffer;
+    gbuffer.positionDepth = float4(0.0f, 0.0f, 0.0f, -1.0f);
+    gbuffer.normalRoughness = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    gbuffer.materialAndFlags = 0u.xxxx;
+    return gbuffer;
+}
+
+EnhancedGBuffer MakeEnhancedGBuffer(RayPayload payload)
+{
+    if (payload.hit == 0u)
+    {
+        return EmptyEnhancedGBuffer();
+    }
+
+    EnhancedGBuffer gbuffer;
+    gbuffer.positionDepth = float4(payload.position, payload.hitT);
+    gbuffer.normalRoughness = float4(normalize(payload.normal), payload.roughness);
+    gbuffer.materialAndFlags = uint4(payload.materialIndex, payload.hit, 0u, 0u);
+    return gbuffer;
+}
+
+EnhancedGBuffer LoadEnhancedGBufferHistory(int2 pixel, uint2 dimensions)
+{
+    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= (int)dimensions.x || pixel.y >= (int)dimensions.y)
+    {
+        return EmptyEnhancedGBuffer();
+    }
+    return g_enhancedGBufferHistory[PixelIndex((uint2)pixel, dimensions)];
+}
+
+bool ValidateEnhancedHistory(EnhancedGBuffer current, EnhancedGBuffer history, float footprintC, float alphaMin)
+{
+    if (current.materialAndFlags.y == 0u || history.materialAndFlags.y == 0u)
+    {
+        return false;
+    }
+    if (current.materialAndFlags.x != history.materialAndFlags.x)
+    {
+        return false;
+    }
+
+    float currentDepth = max(current.positionDepth.w, 0.001f);
+    float historyDepth = max(history.positionDepth.w, 0.001f);
+    float depthTolerance = max(footprintC * max(currentDepth, historyDepth), 0.02f);
+    if (abs(currentDepth - historyDepth) > depthTolerance)
+    {
+        return false;
+    }
+
+    float normalAgreement = dot(normalize(current.normalRoughness.xyz), normalize(history.normalRoughness.xyz));
+    float roughness = min(current.normalRoughness.w, history.normalRoughness.w);
+    float normalThreshold = roughness < alphaMin ? 0.96f : 0.82f;
+    if (normalAgreement < normalThreshold)
+    {
+        return false;
+    }
+
+    float positionTolerance = max(depthTolerance * 2.0f, 0.05f);
+    return length(current.positionDepth.xyz - history.positionDepth.xyz) <= positionTolerance;
+}
+
+bool ReprojectToHistoryPixel(float3 worldPosition, uint2 dimensions, out int2 historyPixel)
+{
+    float4 previousClip = mul(float4(worldPosition, 1.0f), g_scene.previousViewProjection);
+    if (previousClip.w <= 0.0001f)
+    {
+        historyPixel = 0;
+        return false;
+    }
+
+    float2 previousNdc = previousClip.xy / previousClip.w;
+    if (abs(previousNdc.x) > 1.05f || abs(previousNdc.y) > 1.05f)
+    {
+        historyPixel = 0;
+        return false;
+    }
+
+    float2 previousUv = float2(previousNdc.x * 0.5f + 0.5f, 0.5f - previousNdc.y * 0.5f);
+    historyPixel = int2((int)floor(previousUv.x * (float)dimensions.x), (int)floor(previousUv.y * (float)dimensions.y));
+    return historyPixel.x >= 0 && historyPixel.y >= 0 && historyPixel.x < (int)dimensions.x && historyPixel.y < (int)dimensions.y;
+}
+
+bool FindFallbackHistoryPixel(int2 pixel, uint2 dimensions, EnhancedGBuffer currentGBuffer, float footprintC, float alphaMin, out int2 historyPixel)
+{
+    historyPixel = pixel;
+    float bestWeight = 0.0f;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            int2 candidatePixel = pixel + int2(x, y);
+            RestirReservoir candidate = LoadRestirHistory(candidatePixel, dimensions);
+            EnhancedGBuffer candidateGBuffer = LoadEnhancedGBufferHistory(candidatePixel, dimensions);
+            if (candidate.meta.w > 0.5f && candidate.radianceWeight.w > bestWeight && ValidateEnhancedHistory(currentGBuffer, candidateGBuffer, footprintC, alphaMin))
+            {
+                bestWeight = candidate.radianceWeight.w;
+                historyPixel = candidatePixel;
+            }
+        }
+    }
+    return bestWeight > 0.0f;
+}
+
+int UnpackSigned16(uint value)
+{
+    int signedValue = (int)(value & 0xffffu);
+    return signedValue >= 32768 ? signedValue - 65536 : signedValue;
+}
+
+int2 DecodeReuseOffset(uint packed)
+{
+    return int2(UnpackSigned16(packed), UnpackSigned16(packed >> 16u));
+}
+
+int2 PairedReuseOffset(uint2 pixel, uint neighborIndex, uint frameCounter)
+{
+    static const uint TextureSize0 = 254u;
+    static const uint TextureSize1 = 230u;
+    static const uint TextureSize2 = 210u;
+    static const uint TextureBase1 = TextureSize0 * TextureSize0;
+    static const uint TextureBase2 = TextureBase1 + TextureSize1 * TextureSize1;
+    uint textureIndex = neighborIndex % 3u;
+    uint textureSize = textureIndex == 0u ? TextureSize0 : (textureIndex == 1u ? TextureSize1 : TextureSize2);
+    uint textureBase = textureIndex == 0u ? 0u : (textureIndex == 1u ? TextureBase1 : TextureBase2);
+    uint2 coord = uint2((pixel.x + frameCounter * (17u + neighborIndex * 5u)) % textureSize, (pixel.y + frameCounter * (29u + neighborIndex * 7u)) % textureSize);
+    uint packed = g_enhancedReuseTextures[textureBase + coord.y * textureSize + coord.x];
+    int2 offset = DecodeReuseOffset(packed);
+    if ((frameCounter & 1u) != 0u) offset.x = -offset.x;
+    if ((frameCounter & 2u) != 0u) offset.y = -offset.y;
+    if ((frameCounter & 4u) != 0u) offset = offset.yx;
+    return offset;
+}
+
+float PairwiseMisWeight(float candidateWeight, float otherWeight)
+{
+    return candidateWeight / max(candidateWeight + otherWeight, 0.0001f);
+}
+#endif
 
 float2 EnvironmentUv(float3 rayDirection)
 {
@@ -328,6 +516,7 @@ SurfaceData LoadSurface(uint geometryIndex, uint primitiveIndex, float2 barycent
     float3 bary = Barycentric3(barycentrics);
 
     SurfaceData surface;
+    surface.materialIndex = geometry.materialIndex;
     surface.position = Interpolate3(v0.position, v1.position, v2.position, bary);
     surface.normal = normalize(Interpolate3(v0.normal, v1.normal, v2.normal, bary));
     surface.tangent = Interpolate4(v0.tangent, v1.tangent, v2.tangent, bary);
@@ -592,6 +781,7 @@ RayPayload EmptyPayload()
     payload.metallic = 0.0f;
     payload.emissive = 0.0f.xxx;
     payload.ao = 1.0f;
+    payload.materialIndex = 0u;
     return payload;
 }
 
@@ -608,6 +798,7 @@ SurfaceData SurfaceFromPayload(RayPayload payload)
     surface.roughness = payload.roughness;
     surface.metallic = payload.metallic;
     surface.emissive = payload.emissive;
+    surface.materialIndex = payload.materialIndex;
     return surface;
 }
 
@@ -623,7 +814,7 @@ float3 GenerateCameraDirection(uint2 pixel)
     return normalize(farPoint.xyz - nearPoint.xyz);
 }
 
-float3 TracePathSample(uint2 pixel, uint sampleIndex, out RayPayload firstHit, out float3 directNee, out float3 indirect, out uint bounceCount)
+float3 TracePathSample(uint2 pixel, uint sampleIndex, bool useRussianRoulette, out RayPayload firstHit, out float3 directNee, out float3 indirect, out uint bounceCount)
 {
     uint rngState = Hash(pixel.x * 1973u ^ pixel.y * 9277u ^ sampleIndex * 26699u ^ 0x9e3779b9u);
     float3 rayOrigin = g_scene.cameraPosition.xyz;
@@ -714,7 +905,7 @@ float3 TracePathSample(uint2 pixel, uint sampleIndex, out RayPayload firstHit, o
         rayDirection = normalize(nextDirection);
         bounceCount = bounce + 1u;
 
-        if (bounce + 1u >= minBounces)
+        if (useRussianRoulette && bounce + 1u >= minBounces)
         {
             float continueProbability = clamp(MaxComponent(throughput), 0.05f, 0.95f);
             if (Random01(rngState) > continueProbability)
@@ -737,7 +928,10 @@ void RayGen()
     uint frameCounter = (uint)round(g_scene.frameOptions.w);
     uint samplesPerFrame = clamp((uint)round(g_scene.giOptions.x), 1u, 8u);
     uint candidateMultiplier = (PT_RESTIR || PT_RESTIR_DI) ? clamp((uint)round(g_scene.pathOptions.z), 1u, 4u) : 1u;
-    uint totalSamples = samplesPerFrame * candidateMultiplier;
+#if PT_RESTIR_PT_ENHANCED
+    candidateMultiplier = clamp((uint)round(g_scene.restirEnhancedOptions1.w), 1u, 32u);
+#endif
+    uint totalSamples = min(samplesPerFrame * candidateMultiplier, 32u);
     uint firstSampleIndex = frameCounter * totalSamples;
 
     RayPayload firstHit = EmptyPayload();
@@ -745,6 +939,17 @@ void RayGen()
     float3 directNee = 0.0f.xxx;
     float3 indirect = 0.0f.xxx;
     uint bounceCount = 0u;
+#if PT_RESTIR_PT_ENHANCED
+    uint selectionState = Hash(pixel.x * 915488749u ^ pixel.y * 652447297u ^ frameCounter * 1103515245u);
+    float selectedWeightSum = 0.0f;
+    float3 selectedColor = 0.0f.xxx;
+    float3 selectedDirectNee = 0.0f.xxx;
+    float3 selectedIndirect = 0.0f.xxx;
+    RayPayload selectedFirstHit = EmptyPayload();
+    uint selectedBounceCount = 0u;
+    uint selectedSampleIndex = firstSampleIndex;
+    bool useInitialRussianRoulette = g_scene.restirEnhancedOptions0.w > 0.5f;
+#endif
 
     for (uint i = 0u; i < 32u; ++i)
     {
@@ -756,11 +961,31 @@ void RayGen()
         float3 sampleDirect;
         float3 sampleIndirect;
         uint sampleBounces;
-        color += TracePathSample(pixel, firstSampleIndex + i, sampleFirstHit, sampleDirect, sampleIndirect, sampleBounces);
+        float3 sampleColor = TracePathSample(pixel, firstSampleIndex + i,
+#if PT_RESTIR_PT_ENHANCED
+            useInitialRussianRoulette,
+#else
+            true,
+#endif
+            sampleFirstHit, sampleDirect, sampleIndirect, sampleBounces);
+        color += sampleColor;
         if (i == 0u)
         {
             firstHit = sampleFirstHit;
         }
+#if PT_RESTIR_PT_ENHANCED
+        float sampleWeight = max(RestirTarget(sampleColor), 0.0001f);
+        selectedWeightSum += sampleWeight;
+        if (Random01(selectionState) < sampleWeight / max(selectedWeightSum, 0.0001f))
+        {
+            selectedColor = sampleColor;
+            selectedDirectNee = sampleDirect;
+            selectedIndirect = sampleIndirect;
+            selectedFirstHit = sampleFirstHit;
+            selectedBounceCount = sampleBounces;
+            selectedSampleIndex = firstSampleIndex + i;
+        }
+#endif
         directNee += sampleDirect;
         indirect += sampleIndirect;
         bounceCount += sampleBounces;
@@ -881,6 +1106,127 @@ void RayGen()
     if (debugMode == 14u) debugColor = reservoir.meta.y.xxx;
     if (debugMode == 15u) debugColor = saturate(reservoir.meta.z / max(restirSpatialPasses * 4.0f, 1.0f)).xxx;
 #endif
+#if PT_RESTIR_PT_ENHANCED
+    uint2 enhancedDimensions = DispatchRaysDimensions().xy;
+    uint enhancedPixelIndex = PixelIndex(pixel, enhancedDimensions);
+    uint enhancedSpatialPasses = min((uint)round(g_scene.restirOptions.y), 3u);
+    bool enhancedPairedSpatial = g_scene.restirEnhancedOptions0.x > 0.5f;
+    bool enhancedDuplication = g_scene.restirEnhancedOptions0.y > 0.5f;
+    bool enhancedColorReuse = g_scene.restirEnhancedOptions0.z > 0.5f;
+    bool enhancedReplayCompaction = g_scene.restirEnhancedOptions1.x > 0.5f;
+    float enhancedFootprintC = max(g_scene.restirEnhancedOptions1.y, 0.001f);
+    float enhancedAlphaMin = max(g_scene.restirEnhancedOptions1.z, 0.001f);
+    float enhancedDefaultCap = max(g_scene.restirEnhancedOptions2.y, 1.0f);
+    float enhancedMinCap = max(g_scene.restirEnhancedOptions2.z, 1.0f);
+    float enhancedDuplicationAlpha = max(g_scene.restirEnhancedOptions2.w, 0.001f);
+    uint enhancedSeed = selectedSampleIndex;
+    uint enhancedReplaySeed = Hash(pixel.x * 9781u ^ pixel.y * 6271u ^ frameCounter * 104729u ^ 0x9e21f4u);
+    RestirReservoir reservoir = MakeRestirReservoir(selectedColor, totalSamples);
+    reservoir.radianceWeight.w = max(selectedWeightSum / (float)max(totalSamples, 1u), reservoir.radianceWeight.w);
+    reservoir.pathSeedsAndFlags = uint4(enhancedSeed, enhancedReplaySeed, selectedFirstHit.hit | (selectedBounceCount << 8u), selectedBounceCount);
+    reservoir.reconnectData = uint4(asuint(selectedFirstHit.hitT), asuint(selectedFirstHit.roughness), asuint(Luminance(selectedDirectNee + selectedIndirect)), 0u);
+    EnhancedGBuffer currentGBuffer = MakeEnhancedGBuffer(selectedFirstHit);
+    g_enhancedGBufferCurrent[enhancedPixelIndex] = currentGBuffer;
+    int2 enhancedHistoryPixel = int2(pixel);
+    bool enhancedHistoryValid = selectedFirstHit.hit != 0u && ReprojectToHistoryPixel(selectedFirstHit.position, enhancedDimensions, enhancedHistoryPixel);
+    if (enhancedHistoryValid)
+    {
+        EnhancedGBuffer historyGBuffer = LoadEnhancedGBufferHistory(enhancedHistoryPixel, enhancedDimensions);
+        enhancedHistoryValid = ValidateEnhancedHistory(currentGBuffer, historyGBuffer, enhancedFootprintC, enhancedAlphaMin);
+    }
+    if (!enhancedHistoryValid && accumulatedFrames > 0u)
+    {
+        enhancedHistoryValid = FindFallbackHistoryPixel(int2(pixel), enhancedDimensions, currentGBuffer, enhancedFootprintC, enhancedAlphaMin, enhancedHistoryPixel);
+    }
+
+    float temporalCap = enhancedDefaultCap;
+    if (accumulatedFrames > 0u && enhancedDuplication && enhancedHistoryValid)
+    {
+        RestirReservoir seedHistory = LoadRestirHistory(enhancedHistoryPixel, enhancedDimensions);
+        float priorDuplication = (float)(g_enhancedDuplicationHistory[PixelIndex((uint2)enhancedHistoryPixel, enhancedDimensions)] & 0xffu) / 255.0f;
+        temporalCap = lerp(enhancedDefaultCap, enhancedMinCap, pow(saturate(priorDuplication), enhancedDuplicationAlpha));
+    }
+
+    if (accumulatedFrames > 0u && g_scene.restirOptions.x > 0.5f && enhancedHistoryValid)
+    {
+        RestirReservoir history = LoadRestirHistory(enhancedHistoryPixel, enhancedDimensions);
+        float historyM = max(history.meta.x, 1.0f);
+        float mis = PairwiseMisWeight(history.radianceWeight.w, reservoir.radianceWeight.w);
+        history.radianceWeight.w *= (min(historyM, temporalCap) / historyM) * mis;
+        CombineRestirReservoir(reservoir, history);
+        reservoir.meta.y = max(reservoir.meta.y, history.meta.w);
+    }
+
+    if (accumulatedFrames > 0u && enhancedSpatialPasses > 0u)
+    {
+        int radius = max((int)round(g_scene.restirOptions.z), 1);
+        uint spatialIterations = min(enhancedSpatialPasses, 3u);
+        uint pairState = Hash(pixel.x * 1664525u ^ pixel.y * 1013904223u ^ frameCounter * 747796405u);
+        for (uint i = 0u; i < 3u; ++i)
+        {
+            if (i >= spatialIterations)
+            {
+                break;
+            }
+
+            int2 offset;
+            if (enhancedPairedSpatial)
+            {
+                offset = PairedReuseOffset(pixel, i, frameCounter);
+                offset = clamp(offset, int2(-radius, -radius), int2(radius, radius));
+            }
+            else
+            {
+                offset = int2((int)round(Random01(pairState) * 2.0f * radius) - radius, (int)round(Random01(pairState) * 2.0f * radius) - radius);
+            }
+
+            RestirReservoir neighbor = LoadRestirHistory(int2(pixel) + offset, enhancedDimensions);
+            EnhancedGBuffer neighborGBuffer = LoadEnhancedGBufferHistory(int2(pixel) + offset, enhancedDimensions);
+            bool acceptNeighbor = ValidateEnhancedHistory(currentGBuffer, neighborGBuffer, enhancedFootprintC, enhancedAlphaMin);
+            neighbor.radianceWeight.w *= acceptNeighbor ? (enhancedColorReuse ? 0.65f : 0.5f) : 0.0f;
+            CombineRestirReservoir(reservoir, neighbor);
+            reservoir.meta.z += acceptNeighbor ? neighbor.meta.w : 0.0f;
+        }
+    }
+
+    if (reservoir.meta.w > 0.5f)
+    {
+        float3 enhancedRadiance = ClampRadiance(reservoir.radianceWeight.rgb);
+        color = enhancedRadiance;
+        directNee = enhancedRadiance;
+        indirect = enhancedRadiance;
+    }
+
+    float duplicationScore = 0.0f;
+    if (enhancedDuplication && accumulatedFrames > 0u && reservoir.meta.w > 0.5f)
+    {
+        uint duplicateCount = 0u;
+        uint baseSeed = reservoir.pathSeedsAndFlags.x;
+        for (int y = -8; y <= 8; ++y)
+        {
+            for (int x = -8; x <= 8; ++x)
+            {
+                RestirReservoir neighbor = LoadRestirHistory(int2(pixel) + int2(x, y), enhancedDimensions);
+                duplicateCount += (neighbor.meta.w > 0.5f && neighbor.pathSeedsAndFlags.x == baseSeed) ? 1u : 0u;
+            }
+        }
+        duplicationScore = saturate((float)duplicateCount / 288.0f);
+        reservoir.reconnectData.w = (uint)round(duplicationScore * 255.0f);
+    }
+    g_enhancedDuplicationCurrent[enhancedPixelIndex] = (uint)round(duplicationScore * 255.0f);
+
+    g_restirCurrent[enhancedPixelIndex] = reservoir;
+    uint replayNeeded = enhancedReplayCompaction && reservoir.meta.w > 0.5f && (reservoir.meta.y > 0.5f || reservoir.meta.z > 0.5f) ? 1u : 0u;
+    g_enhancedReplayTasks[enhancedPixelIndex] = uint4(replayNeeded, pixel.x, pixel.y, reservoir.pathSeedsAndFlags.z);
+
+    if (debugMode == 0u) debugColor = color;
+    if (debugMode == 13u || debugMode == 16u) debugColor = saturate(reservoir.radianceWeight.w / max(g_scene.restirOptions.w, 0.001f)).xxx;
+    if (debugMode == 17u) debugColor = saturate((float)reservoir.pathSeedsAndFlags.w / max(g_scene.pathOptions.x, 1.0f)).xxx;
+    if (debugMode == 18u) debugColor = float3(enhancedHistoryValid ? 1.0f : 0.0f, reservoir.meta.z > 0.5f, reservoir.meta.w > 0.5f);
+    if (debugMode == 19u) debugColor = saturate(reservoir.meta.z / 3.0f).xxx;
+    if (debugMode == 20u) debugColor = duplicationScore.xxx;
+    if (debugMode == 21u) debugColor = replayNeeded.xxx;
+#endif
 
     if (debugMode == 0u)
     {
@@ -955,4 +1301,5 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     payload.metallic = surface.metallic;
     payload.emissive = surface.emissive;
     payload.ao = surface.ao;
+    payload.materialIndex = surface.materialIndex;
 }
